@@ -349,6 +349,9 @@ npm run typecheck   # tsc --noEmit
 npm test            # unit tests: transform geometry, spec validator, vars, locators, url matching
 ```
 
+Both also run in CI on every push to `main` and every pull request, so a change that breaks either
+is caught before it lands.
+
 These do not exercise the Playwright-driven runner against a live app — that part is only
 verified by actually running `npm run replay -- <spec>` against your target and inspecting the
 output described in the previous section.
