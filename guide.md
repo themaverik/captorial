@@ -21,17 +21,19 @@ instance of the app to produce PNG screenshots plus element-bounds sidecar files
 
 ## Pipeline overview
 
-captorial's intended pipeline has three stages:
+captorial's pipeline has three stages:
 
 ```
-record   headed browser: browse the target app -> draft spec        (planned)
-review   resolve variables, choose screenshot points -> final spec   (planned)
-replay   drive the app from the spec, capture PNG + element bounds    (basic version landed)
+record   headed browser: perform the flow once -> spec              (npm run record)
+review   read back the derived steps, confirm or discard            (inside npm run record)
+replay   drive the app from the spec, capture PNG + element bounds  (npm run replay)
 ```
 
-Only **replay** exists today. Record and review are planned but not built; there is no
-`npm run record` or `npm run review` command. Until those land, you author the spec by hand,
-copying and adapting the sample in `specs/example-login.yaml`.
+**Record** and **replay** exist today. Review is currently a read-back-and-confirm gate at the end
+of recording rather than a separate command: it prints the replayable steps and asks before writing
+anything. There is no per-step editing yet — to change a recorded step, edit the YAML by hand.
+
+You can also skip recording entirely and author a spec by hand, copying `specs/example-login.yaml`.
 
 ## 1. Install and set up
 
@@ -53,7 +55,58 @@ npm test
 spec validator, variable resolution, locator tiers, URL matching) with Node's built-in test
 runner via `tsx`.
 
-## 2. Authoring a spec
+## 2. Recording a spec
+
+```bash
+npm run record
+```
+
+The recorder asks for four things — base URL, email, password, and a name for the tutorial — then
+opens the app in a browser window. Perform the flow exactly as a reader of your tutorial would. Your
+credentials are held in memory for the session only: they become `env:APP_EMAIL` and
+`env:APP_PASSWORD` variables in the spec, never literals, and a password's value never leaves the
+browser at all.
+
+While you drive the app, two shortcuts mark screenshots:
+
+| Shortcut | Captures |
+|---|---|
+| `Ctrl+Shift+S` | One 16:9 frame, anchored to the element at the top of the view |
+| `Ctrl+Shift+F` | The whole page, auto-tiled into overlapping 16:9 frames |
+
+Use `Ctrl+Shift+F` for a tall page that holds still — the tiling grows the viewport, slices the
+content top to bottom, and guarantees consecutive tiles overlap. Use `Ctrl+Shift+S` when getting to
+the next frame needs an interaction first: scroll down, open a dropdown, expand a section, then mark
+another frame. Anything you do between frames is recorded as a step, so replay reproduces the same
+sequence.
+
+For a long form, scroll so the *last field you already captured* sits at the top of the view before
+pressing `Ctrl+Shift+S` again. That field then appears at the bottom of one frame and the top of the
+next, which is what carries the eye across the seam. The recorder checks this as you go and warns if
+a frame starts below where the previous one ended, since that strip would appear in no screenshot.
+
+Press Enter in the terminal when the flow is done, or just close the browser. The recorder prints
+the steps it derived:
+
+```
+Step 1  ->  /login
+    fill    "Email address" (textbox) = $email (from env:APP_EMAIL)
+    fill    [password-field] = $password (from env:APP_PASSWORD)
+    click   "Sign in" (button)
+Step 2  ->  /orders/new
+    fill    "Company name" (textbox) = $companyName ("Acme Ltd")
+    shot    01-company-name — anchored, framed from "Company name" down
+```
+
+Each field you filled becomes a variable named after its **label**, defaulting to the value you
+typed, so the same flow can be replayed with different data by overriding one variable. Confirm, and
+the spec is written to `specs/<tutorial>.yaml`.
+
+Things the recorder will tell you about rather than guess at: a control that matched several
+elements (it records the position and asks you to add a `data-testid`), a file upload (the browser
+hides the real path), unchecking a checkbox, and any interaction with no semantic locator at all.
+
+## 3. Authoring a spec by hand
 
 A canonical spec is a single YAML file describing one tutorial: which pages to visit, which
 actions to perform, and which screenshots to take. It is the only artifact the replay runner
@@ -151,13 +204,31 @@ Supported actions: `fill`, `click`, `select`, `check`, `upload`, `press`. `fill`
 `press`, and `upload` require a `value` (a literal or a `$var`); `upload` takes a comma-separated
 list of file paths.
 
-Shots have three crop modes. `crop: element` captures just the `target` locator's element.
-`crop: fullpage` grows the viewport and tiles the whole page's content into 16:9 images.
-`crop: viewport` captures the current viewport as-is. Every shot that has a `target` also writes
-a `<id>.bounds.json` sidecar next to the PNG, recording the element's bounds and device pixel
-ratio for any downstream processing.
+Shots have four crop modes:
 
-## 3. Running replay
+| `crop` | Captures |
+|---|---|
+| `element` | Just the `target` locator's element (`target` required) |
+| `viewport` | The current viewport as-is |
+| `fullpage` | Grows the viewport and tiles the whole page's content into overlapping 16:9 images |
+| `anchored` | One 16:9 frame whose top edge is `anchor` (`anchor` required) |
+
+`fullpage` and `anchored` are the two ways to cover a page taller than one frame, and they trade
+off against each other. `fullpage` slices a single snapshot, so overlap between tiles is guaranteed
+but the page must hold one state throughout. `anchored` shoots one frame against whatever state is
+live, so you can open a dropdown or expand a section between frames — but continuity becomes yours
+to arrange, by anchoring each frame to an element that was visible in the previous one:
+
+```yaml
+- shot: { id: 01-address, crop: anchored, anchor: { role: textbox, name: Address line 1 } }
+- do: [{ action: click, locator: { role: button, name: Country } }]   # opens the dropdown
+  shot: { id: 02-country, crop: anchored, anchor: { role: textbox, name: Address line 4 } }
+```
+
+Every shot that has a `target` also writes a `<id>.bounds.json` sidecar next to the PNG, recording
+the element's bounds and device pixel ratio for any downstream processing.
+
+## 4. Running replay
 
 Once you have a spec, run it with:
 
@@ -212,7 +283,7 @@ If the shot count is lower than the number of `shot:` entries in your spec, or w
 non-zero, check the console output above that summary line — the runner logs which locator tier
 it fell back to (or failed on) for each step.
 
-## 4. Reading the output
+## 5. Reading the output
 
 Replay writes into `OUTPUT_DIR/<tutorial>/`. For the example spec with `OUTPUT_DIR=./out` that's
 `./out/example-login/`. Expect one PNG per shot (or several `-1`, `-2`, ... tiles for a
@@ -231,7 +302,7 @@ out/example-login/
 capture time. It exists so a later processing step (cropping, annotation, layout) can work from
 exact coordinates instead of re-measuring the page.
 
-## 5. Verifying your work
+## 6. Verifying your work
 
 Before trusting a spec (or a change to the replay runner itself), run the two checks the project
 uses in development:

@@ -9,10 +9,11 @@ Standalone Playwright tool. No product-specific code lives here; keep it that wa
 ## Architecture
 
 ```
-spec/        canonical spec: types + hand-rolled validator (the only artifact the runner reads)
+spec/        canonical spec: types + hand-rolled validator + serialiser (the only artifact read)
+record/      live recorder: browser observer, locator derivation, verification, step assembly
 replay/      variable resolution, semantic locator resolution, url matching, the replay runner
-transform/   scale / frame (16:9 tiling) / store — the STABLE contract boundary
-cli/         command entry points (replay)
+transform/   scale / frame (16:9 tiling + anchored frames) / store — the STABLE contract boundary
+cli/         command entry points (record, replay)
 specs/       one YAML spec per tutorial
 ```
 
@@ -32,14 +33,20 @@ The transform layer is the stable boundary the whole pipeline feeds. Its contrac
 ## Commands
 
 ```bash
+npm run record                            # drive a flow once; writes specs/<tutorial>.yaml
 npm run replay -- specs/<tutorial>.yaml   # drive a target app from a spec
 npm run typecheck                         # tsc --noEmit
 npm test                                  # node --import tsx --test (unit tests)
 ```
 
-Replay config is generic env only: `BASE_URL`, `OUTPUT_DIR`, `STORAGE_STATE`, `DEVICE_SCALE_FACTOR`,
+Config is generic env only: `BASE_URL`, `OUTPUT_DIR`, `STORAGE_STATE`, `DEVICE_SCALE_FACTOR`,
 `CROP_169`, `HEADED`, `SLOWMO`. Never hardcode target URLs or entity values in the tool; put them in
-a spec's `vars` (fixed / `env:VAR` / generated).
+a spec's `vars` (fixed / `env:VAR` / generated). The recorder asks for the base URL and credentials
+interactively and emits them as `env:APP_EMAIL` / `env:APP_PASSWORD` vars — never as literals.
+
+Anything injected into the page must be a function with its data passed as an argument. tsx
+transpiles with esbuild's `keepNames`, whose `__name` helper does not survive serialisation, so
+`installObserver` injects a fixed identity shim first — see `record/observer.ts`.
 
 ## Testing
 

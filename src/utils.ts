@@ -55,6 +55,8 @@ export const readJson = <T>(file: string): T => JSON.parse(fs.readFileSync(file,
 export const log = {
   info: (msg: string): void => console.log(`[info] ${msg}`),
   step: (msg: string): void => console.log(`  -> ${msg}`),
+  /** Unprefixed line, for rendered output a person reads as a block (e.g. a spec review). */
+  plain: (msg: string): void => console.log(msg),
   warn: (msg: string): void => console.warn(`[warn] ${msg}`),
   error: (msg: string): void => console.error(`[error] ${msg}`),
 };
