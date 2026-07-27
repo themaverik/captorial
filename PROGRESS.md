@@ -13,12 +13,11 @@ The stable boundary is documented in `docs/transform-contract.md`.
 | B | Replay runner (spec → semantic locators → transform), basic version | [~] Basic runner + CLI landed; not yet run against a live app |
 | C | Live recorder (headed capture → spec) | [~] Recorder + CLI landed, verified against a fixture page; not yet run against a real app |
 | D | Review CLI (draft spec → final spec) | [~] Editing pass landed inside `record`; smoke-tested with a scripted prompt, not yet used in a live recording |
-| E | CI (typecheck + unit tests on push and pull request) | [~] Workflow landed; not yet observed on a real run |
+| E | CI (typecheck + unit tests on push and pull request) | [x] Done, verified — green on a clean checkout |
 
-Merged to `main`: `f4e4aca` (anchored frames), `df977ec` (recorder), `88d86ee` (review pass),
-`639ea9e` (env template + guide). `ffc47cb` (CI) is pending merge. No phase is `[x]` beyond 0 and A,
-because B, C and D have all been verified against fixtures and scripted input rather than a live
-target app.
+The work is spread across `f4e4aca` (anchored frames), `df977ec` (recorder), `88d86ee` (review
+pass), `639ea9e` (env template + guide) and `ffc47cb` (CI). B, C and D stay `[~]` because they have
+all been verified against fixtures and scripted input rather than a live target app.
 
 Phase E used to read "retire the legacy generators behind `--legacy`". That half is gone: no legacy
 generator survives in this repo — `src/` is `cli`, `record`, `replay`, `spec`, `transform` and
@@ -68,6 +67,8 @@ Two shot modes, because they answer different questions:
 - `npm run typecheck` — clean.
 - Both gates run in CI (`.github/workflows/ci.yml`) on every push to `main` and every pull request,
   on Node 20 with the Playwright browser download skipped — nothing in the suite launches a browser.
+  Confirmed green on a clean checkout, so `npm ci` and the shell-expanded test globs both hold on
+  Linux and on the Node the runner ships, not just on the dev machine.
 - `npm test` — 102/102 pass (transform geometry including anchored clips and continuity, spec
   validator, spec serialisation round trip, variable resolution, locator tiers and derivation, URL
   matching, step assembly, review render, review edits, review command parsing). Pure logic only.
@@ -87,9 +88,8 @@ and to compare output with the prior pipeline, the recorder to confirm the obser
 a framework-rendered SPA, and the review pass to be used against a real recording rather than a
 scripted prompt. What Phase D deliberately leaves out is locator editing: locators are verified
 against the live DOM at record time and the page has closed by review, so editing one there would
-ship it unverified. That belongs in an in-session review while the browser is still open. E needs
-one real run to confirm the workflow is green on a clean checkout, which only happens once it is
-pushed.
+ship it unverified. That belongs in an in-session review while the browser is still open. With E
+closed, a live run is the only thing left standing between B, C, D and done.
 
 ## Known gaps
 
