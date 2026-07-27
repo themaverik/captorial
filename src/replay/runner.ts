@@ -13,7 +13,7 @@ import path from 'node:path';
 import { chromium, type Browser, type Page } from 'playwright';
 import { PageTransform } from '../transform/index.js';
 import type { TileCaptureOptions } from '../transform/types.js';
-import { ensureDir, log, writeJson } from '../utils.js';
+import { ensureDir, isWithinRoot, log, sanitizeName, writeJson } from '../utils.js';
 import type { CanonicalSpec, Shot, SpecLocator, Step, StepAction } from '../spec/types.js';
 import { resolveLocator } from './locator.js';
 import { resolveValue, resolveVars } from './vars.js';
@@ -135,22 +135,24 @@ const runShot = async (
   dir: string,
 ): Promise<ShotResult> => {
   ensureDir(dir);
+  // The shot id becomes a filename; sanitise it so a recorded/authored id can never traverse.
+  const id = sanitizeName(shot.id) || 'shot';
   let files: string[];
   if (shot.crop === 'fullpage') {
-    files = await transform.captureWebpageTiles(dir, shot.id);
+    files = await transform.captureWebpageTiles(dir, id);
   } else if (shot.crop === 'element' && shot.target) {
     const found = await resolveLocator(page, shot.target);
-    const dest = path.join(dir, `${shot.id}.png`);
+    const dest = path.join(dir, `${id}.png`);
     if (found) await found.locator.first().screenshot({ path: dest });
     else await page.screenshot({ path: dest });
     files = [dest];
   } else {
-    const dest = path.join(dir, `${shot.id}.png`);
+    const dest = path.join(dir, `${id}.png`);
     await page.screenshot({ path: dest });
     files = [dest];
   }
-  const boundsFile = shot.target ? await writeBoundsSidecar(page, shot.target, dir, shot.id) : undefined;
-  return { id: shot.id, files, boundsFile };
+  const boundsFile = shot.target ? await writeBoundsSidecar(page, shot.target, dir, id) : undefined;
+  return { id, files, boundsFile };
 };
 
 export const replaySpec = async (
@@ -161,7 +163,13 @@ export const replaySpec = async (
   const resolvedVars = resolveVars(spec.vars, { env, now: new Date() });
   const warnings: string[] = [];
   const shots: ShotResult[] = [];
-  const shotDir = path.join(config.outputDir, spec.tutorial);
+  // Sanitise the tutorial slug and confirm the shot directory stays under the output root, so a
+  // hostile or recorded name cannot write outside it.
+  const tutorial = sanitizeName(spec.tutorial) || 'tutorial';
+  const shotDir = path.join(config.outputDir, tutorial);
+  if (!isWithinRoot(config.outputDir, shotDir)) {
+    throw new Error(`tutorial "${spec.tutorial}" resolves outside the output directory`);
+  }
 
   const browser: Browser = await chromium.launch({ headless: !config.headed, slowMo: config.slowMo });
   const context = await browser.newContext({

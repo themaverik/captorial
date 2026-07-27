@@ -3,12 +3,27 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-/** Make a string safe for use as a folder/file name (keeps spaces, strips reserved chars). */
+/**
+ * Make a string safe for use as a folder/file name. Removes path separators and reserved
+ * characters, collapses whitespace, and drops leading dots so a name like "." or ".." (which would
+ * otherwise let `path.join` climb out of the intended directory) cannot traverse.
+ */
 export const sanitizeName = (name: string): string =>
   name
-    .replace(/[/\\:*?"<>|]/g, '')
+    .replace(/[/\\:*?"<>|]/g, '') // strip path separators and reserved characters
     .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/^\.+/, '') // no leading dots -> neutralises "." and ".."
     .trim();
+
+/**
+ * True when `target` resolves to `root` itself or a path inside it. Used to assert that a path built
+ * from external input never escapes the configured output root, even if sanitisation is bypassed.
+ */
+export const isWithinRoot = (root: string, target: string): boolean => {
+  const rel = path.relative(path.resolve(root), path.resolve(target));
+  return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
+};
 
 /** Zero-padded 2-digit order prefix. */
 export const pad2 = (n: number): string => String(n).padStart(2, '0');
