@@ -4,6 +4,12 @@
  */
 
 export { PageTransform } from './pageCapture.js';
-export { clampViewportHeight, computeTileClips, tileHeightFor } from './tileGeometry.js';
-export type { Clip, TileGeometryInput } from './tileGeometry.js';
+export {
+  anchoredClip,
+  clampViewportHeight,
+  computeTileClips,
+  framesAreContinuous,
+  tileHeightFor,
+} from './tileGeometry.js';
+export type { AnchoredClipInput, Clip, TileGeometryInput } from './tileGeometry.js';
 export type { CaptureTargetOptions, TileCaptureOptions } from './types.js';

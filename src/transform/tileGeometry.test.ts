@@ -8,7 +8,15 @@
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { clampViewportHeight, computeTileClips, tileHeightFor } from './tileGeometry.js';
+import {
+  anchoredClip,
+  clampViewportHeight,
+  computeTileClips,
+  framesAreContinuous,
+  tileHeightFor,
+} from './tileGeometry.js';
+
+const FRAME = { width: 1920, aspectWidth: 16, aspectHeight: 9 };
 
 test('tileHeightFor computes a 16:9 tile height from the width', () => {
   assert.equal(tileHeightFor(1920, 16, 9), 1080);
@@ -81,4 +89,38 @@ test('computeTileClips does not tile content only a hair taller than one tile', 
   });
   assert.equal(noTile.length, 1);
   assert.equal(noTile[0].height, 1080);
+});
+
+test('anchoredClip puts the anchor at the top of a 16:9 frame', () => {
+  const clip = anchoredClip({ ...FRAME, contentHeight: 4000, anchorY: 1500 });
+  assert.deepEqual(clip, { x: 0, y: 1500, width: 1920, height: 1080 });
+});
+
+test('anchoredClip keeps headroom above the anchor without going negative', () => {
+  const withRoom = anchoredClip({ ...FRAME, contentHeight: 4000, anchorY: 1500, headroomPx: 120 });
+  assert.equal(withRoom.y, 1380);
+  // An anchor near the very top clamps to 0 rather than clipping above the content.
+  const atTop = anchoredClip({ ...FRAME, contentHeight: 4000, anchorY: 40, headroomPx: 120 });
+  assert.equal(atTop.y, 0);
+});
+
+test('anchoredClip clamps the last frame to the content bottom', () => {
+  // An anchor 300px from the bottom would overrun; the frame slides up to end flush.
+  const clip = anchoredClip({ ...FRAME, contentHeight: 2000, anchorY: 1700 });
+  assert.equal(clip.y, 920);
+  assert.equal(clip.y + clip.height, 2000);
+});
+
+test('anchoredClip collapses to the content height when content is shorter than one frame', () => {
+  const clip = anchoredClip({ ...FRAME, contentHeight: 600, anchorY: 400 });
+  assert.deepEqual(clip, { x: 0, y: 0, width: 1920, height: 600 });
+});
+
+test('framesAreContinuous flags an anchor that falls below the previous frame', () => {
+  // Anchor still inside the previous frame -> the frames overlap, nothing is lost.
+  assert.equal(framesAreContinuous(0, 1080, 900), true);
+  // Anchor exactly on the previous frame's bottom edge -> still continuous.
+  assert.equal(framesAreContinuous(0, 1080, 1080), true);
+  // Anchor past the bottom edge -> the strip between 1080 and 1200 is in no frame.
+  assert.equal(framesAreContinuous(0, 1080, 1200), false);
 });

@@ -24,4 +24,6 @@ export interface TileCaptureOptions extends CaptureTargetOptions {
   maxViewportHeightPx: number;
   /** Whitespace (px) added around the form in `prepareForCapture` ('form' capture mode). */
   capturePaddingPx: number;
+  /** Context (px) kept above the anchor in `captureAnchoredFrame`. Default 0. */
+  anchorHeadroomPx?: number;
 }

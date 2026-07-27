@@ -127,12 +127,32 @@ const writeBoundsSidecar = async (
   return file;
 };
 
+/**
+ * Top offset of an anchored shot's anchor element, or null when it cannot be resolved — in which
+ * case the transform falls back to the top of the content rather than failing the run. Called back
+ * from the transform *after* it has grown the viewport and reset scroll, since both move the anchor.
+ */
+const measureAnchorY = async (
+  page: Page,
+  anchor: SpecLocator,
+  warnings: string[],
+): Promise<number | null> => {
+  const found = await resolveLocator(page, anchor);
+  const box = found ? await found.locator.first().boundingBox().catch(() => null) : null;
+  if (!box) {
+    warnings.push('anchored shot: anchor did not resolve — framed from the top of the content');
+    return null;
+  }
+  return box.y;
+};
+
 /** Capture one shot per its crop mode, plus the bounds sidecar when a target is given. */
 const runShot = async (
   page: Page,
   transform: PageTransform,
   shot: Shot,
   dir: string,
+  warnings: string[],
 ): Promise<ShotResult> => {
   ensureDir(dir);
   // The shot id becomes a filename; sanitise it so a recorded/authored id can never traverse.
@@ -140,6 +160,9 @@ const runShot = async (
   let files: string[];
   if (shot.crop === 'fullpage') {
     files = await transform.captureWebpageTiles(dir, id);
+  } else if (shot.crop === 'anchored' && shot.anchor) {
+    const anchor = shot.anchor;
+    files = await transform.captureAnchoredFrame(dir, id, () => measureAnchorY(page, anchor, warnings));
   } else if (shot.crop === 'element' && shot.target) {
     const found = await resolveLocator(page, shot.target);
     const dest = path.join(dir, `${id}.png`);
@@ -188,7 +211,7 @@ export const replaySpec = async (
       await runExpect(page, step, warnings);
       for (const action of step.do ?? []) await runAction(page, action, resolvedVars, warnings);
       if (step.shot) {
-        const result = await runShot(page, transform, step.shot, shotDir);
+        const result = await runShot(page, transform, step.shot, shotDir, warnings);
         shots.push(result);
         log.step(`shot ${result.id} -> ${result.files.map((f) => path.basename(f)).join(', ')}`);
       }

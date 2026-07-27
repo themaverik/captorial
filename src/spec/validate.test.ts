@@ -85,3 +85,32 @@ test('an element shot without a target is rejected', () => {
   });
   assert.equal(result.ok, false);
 });
+
+test('an anchored shot without an anchor is rejected', () => {
+  const result = validateSpec({
+    tutorial: 't',
+    vars: {},
+    steps: [{ shot: { id: 's', crop: 'anchored' } }],
+  });
+  assert.equal(result.ok, false);
+  if (result.ok) return;
+  assert.ok(result.errors.some((e) => /anchor/i.test(e)), result.errors.join('\n'));
+});
+
+test('an anchored shot with a resolvable anchor is accepted', () => {
+  const result = validateSpec({
+    tutorial: 't',
+    vars: {},
+    steps: [{ shot: { id: 's', crop: 'anchored', anchor: { role: 'textbox', name: 'City' } } }],
+  });
+  assert.equal(result.ok, true, result.ok ? '' : result.errors.join('\n'));
+});
+
+test('an unknown crop mode is rejected', () => {
+  const result = validateSpec({
+    tutorial: 't',
+    vars: {},
+    steps: [{ shot: { id: 's', crop: 'panorama' } }],
+  });
+  assert.equal(result.ok, false);
+});

@@ -42,6 +42,7 @@ new PageTransform(page: Page, options: TileCaptureOptions)
 | `aspectWidth` / `aspectHeight` | Tile aspect ratio numerator / denominator |
 | `maxViewportHeightPx` | Hard cap on how tall the viewport may grow |
 | `capturePaddingPx` | Whitespace added around the content in `prepareForCapture` (element mode) |
+| `anchorHeadroomPx` | Context kept above the anchor in `captureAnchoredFrame` (default 0) |
 | `contentSelector` | CSS selector for the content root to size to (default `form`) |
 | `topAnchorSelectors` | Selectors tried in order to scroll tile 1 to the top; falls back to the content root |
 | `onSettle` | Optional callback awaited after each viewport reflow (e.g. wait out an app spinner) |
@@ -58,8 +59,23 @@ Methods:
   anchors tile 1 to the top, captures the tile(s), writes them, restores the viewport, and returns
   the absolute paths written. One file `<base>.png`, or `<base>-1.png`, `<base>-2.png`, … when
   tiled.
+- `captureAnchoredFrame(dir, base, measureAnchorY): Promise<string[]>` — one aspect-ratio frame whose
+  top edge is an anchor element, captured against the live page state. Grows the viewport and resets
+  window scroll as the tiled path does, then calls `measureAnchorY` (after both, since each reflows
+  the page) for the anchor's top offset; null falls back to the top of the content. Writes
+  `<base>.png` and returns it in a single-element array. Takes a callback rather than a locator so
+  this layer stays free of spec and app types.
 - `prepareForCapture(): Promise<void>` — for element-crop mode: unclips inner scroll containers and
   pads the content so an element screenshot lays out at full natural height.
+
+### Tiled vs anchored
+
+`captureWebpageTiles` slices one static snapshot, so continuity between tiles is automatic but the
+page must be in a single state throughout. `captureAnchoredFrame` shoots one frame against whatever
+state is live, so a caller can open a dropdown or expand a section between frames — at the cost of
+continuity becoming the caller's responsibility. It deliberately leaves inner scroll containers
+alone, since resetting them would destroy the state it exists to capture, and it is always
+aspect-framed regardless of `cropTo169`.
 
 ### Pure geometry
 
@@ -67,11 +83,17 @@ Methods:
 tileHeightFor(width, aspectWidth, aspectHeight): number
 clampViewportHeight(needed, current, max): number
 computeTileClips({ width, usableHeight, aspectWidth, aspectHeight, cropTo169 }): Clip[]
+anchoredClip({ width, contentHeight, anchorY, aspectWidth, aspectHeight, headroomPx }): Clip
+framesAreContinuous(prevTop, frameHeight, nextAnchorY): boolean
 ```
 
 `Clip` is `{ x, y, width, height }`, the shape Playwright's `page.screenshot({ clip })` takes.
 `computeTileClips` returns one clip for the single-image case and N evenly distributed clips for the
 tiled case (tile 1 anchored to the top, the last to the bottom).
+
+`anchoredClip` returns the single frame for the anchored case, clamped so it neither starts above the
+content nor runs past its bottom. `framesAreContinuous` reports whether one frame carries on from the
+previous without a gap, so a caller can flag missing coverage while the page is still open.
 
 ## Output contract
 

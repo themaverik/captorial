@@ -46,14 +46,26 @@ export interface StepAction {
   value?: string;
 }
 
-/** How a shot is framed: to a single element, the current viewport, or the whole page. */
-export type CropMode = 'element' | 'viewport' | 'fullpage';
+/**
+ * How a shot is framed:
+ *  - `element`  — crop to a single element.
+ *  - `viewport` — whatever is on screen right now, unchanged.
+ *  - `fullpage` — grow the viewport and auto-tile the whole page into overlapping aspect-ratio
+ *                 frames. Best for a tall but *static* form: the tiling guarantees continuity.
+ *  - `anchored` — one aspect-ratio frame whose top edge is `anchor`, shot against the live page
+ *                 state. Use when the page changes between frames (a dropdown opened, a section
+ *                 expanded), which a single tiled pass cannot express. Continuity is the author's
+ *                 to arrange: anchor each frame to an element that was visible in the previous one.
+ */
+export type CropMode = 'element' | 'viewport' | 'fullpage' | 'anchored';
 
 export interface Shot {
   id: string;
   crop: CropMode;
   /** The element to crop to; required when `crop` is `element`. */
   target?: SpecLocator;
+  /** The element pinned to the frame's top edge; required when `crop` is `anchored`. */
+  anchor?: SpecLocator;
 }
 
 /** Assertions the runner satisfies before proceeding past a step. */

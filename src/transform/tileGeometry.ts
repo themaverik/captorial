@@ -62,3 +62,46 @@ export const computeTileClips = (input: TileGeometryInput): Clip[] => {
   }
   return clips;
 };
+
+export interface AnchoredClipInput {
+  /** Full width of the capture (the viewport width). */
+  width: number;
+  /** Rendered content height available to capture (clamped to the grown viewport height). */
+  contentHeight: number;
+  /** Y offset of the element the frame is anchored to, in the same space as `contentHeight`. */
+  anchorY: number;
+  aspectWidth: number;
+  aspectHeight: number;
+  /** Context kept above the anchor so it does not sit flush against the frame's top edge. */
+  headroomPx?: number;
+}
+
+/**
+ * One aspect-ratio frame whose top edge sits at `anchorY` (less `headroomPx`), clamped so the frame
+ * never starts above the content nor runs past its bottom. Content shorter than one frame collapses
+ * to the content height.
+ *
+ * This is the manually staged counterpart to `computeTileClips`. Tiling slices a single static
+ * snapshot, so it cannot express a page whose state changes between frames (a dropdown opened, a
+ * section expanded); an anchored frame is captured against whatever state is live at that moment,
+ * and continuity between frames comes from the caller anchoring frame N+1 to an element that was
+ * visible in frame N.
+ */
+export const anchoredClip = (input: AnchoredClipInput): Clip => {
+  const { width, contentHeight, anchorY, aspectWidth, aspectHeight, headroomPx = 0 } = input;
+  const height = Math.min(tileHeightFor(width, aspectWidth, aspectHeight), contentHeight);
+  const maxTop = Math.max(0, contentHeight - height);
+  const top = Math.min(Math.max(0, Math.round(anchorY - headroomPx)), maxTop);
+  return { x: 0, y: top, width, height };
+};
+
+/**
+ * True when a frame starting at `nextAnchorY` continues on from a frame of `frameHeight` starting at
+ * `prevTop` — i.e. the next anchor was still inside the previous frame, so no content falls between
+ * them. Pure so the recorder can flag a coverage gap while the page is still open.
+ */
+export const framesAreContinuous = (
+  prevTop: number,
+  frameHeight: number,
+  nextAnchorY: number,
+): boolean => nextAnchorY <= prevTop + frameHeight;

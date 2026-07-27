@@ -11,7 +11,7 @@
 
 import path from 'node:path';
 import type { Page } from 'playwright';
-import { clampViewportHeight, computeTileClips } from './tileGeometry.js';
+import { anchoredClip, clampViewportHeight, computeTileClips } from './tileGeometry.js';
 import type { TileCaptureOptions } from './types.js';
 
 const DEFAULT_CONTENT_SELECTOR = 'form';
@@ -128,6 +128,57 @@ export class PageTransform {
         written.push(dest);
       }
       return written;
+    } finally {
+      await restoreViewport();
+    }
+  }
+
+  /**
+   * Capture one aspect-ratio frame whose top edge is an anchor element, against whatever page state
+   * is live right now. This is the manually staged counterpart to `captureWebpageTiles`: tiling
+   * slices one static snapshot and so cannot express a page whose state differs between frames (a
+   * dropdown opened, a section expanded), whereas each anchored frame is shot in its own state.
+   *
+   * Grows the viewport as the tiled path does (so an inner-scrolling panel expands to full height)
+   * and resets window scroll, so measured offsets and the screenshot clip share one coordinate
+   * space. `measureAnchorY` runs *after* both — each reflows the page and moves the anchor — and
+   * returns the anchor's top offset, or null to fall back to the top of the content. Taking a
+   * callback rather than a locator keeps this layer free of spec and app types.
+   *
+   * Inner scroll containers are deliberately left as they are; resetting them would destroy the
+   * live state this mode exists to capture. The frame is always aspect-framed, independent of
+   * `cropTo169` — an anchored frame is a per-shot framing choice by definition.
+   *
+   * Writes `<base>.png` and returns it in a single-element array, matching `captureWebpageTiles` so
+   * callers handle one shape.
+   */
+  async captureAnchoredFrame(
+    dir: string,
+    base: string,
+    measureAnchorY: () => Promise<number | null>,
+  ): Promise<string[]> {
+    const restoreViewport = await this.growViewportToFitForm();
+    try {
+      await this.page.evaluate(() => window.scrollTo(0, 0)).catch(() => undefined);
+      await this.page.waitForTimeout(150);
+
+      const viewport = this.page.viewportSize() || { width: 1920, height: 1080 };
+      const contentHeight = await this.page.evaluate(() =>
+        Math.ceil(document.documentElement.scrollHeight),
+      );
+      const clip = anchoredClip({
+        width: viewport.width,
+        // Clip must stay within the rendered viewport, which we grew to (at most) the content height.
+        contentHeight: Math.min(contentHeight, viewport.height),
+        anchorY: (await measureAnchorY()) ?? 0,
+        aspectWidth: this.options.aspectWidth,
+        aspectHeight: this.options.aspectHeight,
+        headroomPx: this.options.anchorHeadroomPx,
+      });
+
+      const dest = path.join(dir, `${base}.png`);
+      await this.page.screenshot({ path: dest, clip });
+      return [dest];
     } finally {
       await restoreViewport();
     }

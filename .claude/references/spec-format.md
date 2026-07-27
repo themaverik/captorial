@@ -49,7 +49,7 @@ disambiguates when several match (prefer a testid instead).
     - { action: click, locator: { role: button,  name: Sign in } }
   shot:                        # optional: capture a screenshot
     id: 01-login
-    crop: element              # element | viewport | fullpage
+    crop: element              # element | viewport | fullpage | anchored
     target: { testid: login-card }   # required when crop is element
 ```
 
@@ -62,6 +62,34 @@ require a `value` (a literal or a `$var`). `upload` takes a comma-separated list
 
 ### Shots
 
-`crop: fullpage` grows the viewport and tiles the whole form via the transform layer. `element` crops
-to the `target`. Every shot with a `target` also writes a `<id>.bounds.json` sidecar (element bounds
-plus device pixel ratio) for downstream transformation.
+| `crop` | Framing |
+|---|---|
+| `element` | Crops to `target` (required). |
+| `viewport` | Whatever is on screen, unchanged. |
+| `fullpage` | Grows the viewport and auto-tiles the whole page into overlapping frames. |
+| `anchored` | One aspect-ratio frame whose top edge is `anchor` (required). |
+
+Every shot with a `target` also writes a `<id>.bounds.json` sidecar (element bounds plus device pixel
+ratio) for downstream transformation.
+
+#### Choosing between `fullpage` and `anchored`
+
+`fullpage` grows the viewport to the whole content height and slices it into N evenly distributed
+16:9 tiles, so consecutive tiles always share an overlap strip — a field at the bottom of tile 1 is
+also at the top of tile 2. Continuity is automatic. Use it for a tall but **static** page.
+
+Because it slices one snapshot, it cannot express a page whose state differs between frames. When
+capturing frame 2 needs an interaction first — opening a dropdown, expanding a section — use
+`anchored` frames instead: one shot each, with the interactions recorded as ordinary `do` actions
+between them.
+
+```yaml
+- shot: { id: 01-address, crop: anchored, anchor: { role: textbox, name: Address line 1 } }
+- do: [{ action: click, locator: { role: button, name: Country } }]     # opens the dropdown
+  shot: { id: 02-country, crop: anchored, anchor: { role: textbox, name: Address line 4 } }
+```
+
+Continuity is then the author's to arrange: anchor each frame to an element that was visible in the
+previous one. Anchoring frame 2 to the *last field visible in frame 1* is what carries the eye
+across the seam. The recorder checks this while the page is still open and warns when a frame's
+anchor sits below the previous frame's bottom edge, since that strip would appear in no shot.

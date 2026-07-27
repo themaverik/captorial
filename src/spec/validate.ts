@@ -23,7 +23,7 @@ export type ValidationResult =
   | { ok: false; errors: string[] };
 
 const ACTIONS: ReadonlyArray<ActionType> = ['fill', 'click', 'select', 'check', 'upload', 'press'];
-const CROP_MODES: ReadonlyArray<CropMode> = ['element', 'viewport', 'fullpage'];
+const CROP_MODES: ReadonlyArray<CropMode> = ['element', 'viewport', 'fullpage', 'anchored'];
 const LOCATOR_KEYS = ['role', 'name', 'testid', 'text'] as const;
 
 const isObject = (value: unknown): value is Record<string, unknown> =>
@@ -103,6 +103,7 @@ const validateShot = (raw: unknown, at: string, errors: string[]): void => {
     errors.push(`${at}: crop must be one of ${CROP_MODES.join(', ')}`);
   }
   if (raw.crop === 'element') validateLocator(raw.target, `${at}.target`, errors);
+  if (raw.crop === 'anchored') validateLocator(raw.anchor, `${at}.anchor`, errors);
 };
 
 const validateStep = (raw: unknown, index: number, varNames: Set<string>, errors: string[]): void => {
