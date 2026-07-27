@@ -60,6 +60,15 @@ npm install
 npx playwright install chromium
 ```
 
+Then create your local configuration from the annotated template. Nothing in it is needed to start
+recording — `npm run record` prompts for the base URL and credentials. Replay is what reads it,
+including the variables a spec's `vars` block points at. `.env` is gitignored; keep real hostnames
+and credentials there and nowhere else.
+
+```bash
+cp .env.example .env
+```
+
 Confirm the project builds and its unit tests pass before doing anything else:
 
 ```bash
@@ -267,7 +276,19 @@ product-specific is hardcoded:
 | `CROP_169` | Crop full-page shots to 16:9 tiles (default true) |
 | `HEADED`, `SLOWMO` | Run headed / slow down actions for debugging |
 
-Set variables inline, or in a `.env` file (loaded automatically via `dotenv/config`):
+A spec's credentials are a separate thing, and the CLIs never read them. A spec declares
+`source: env:DEMO_EMAIL`, and `vars.ts` resolves that name at replay time — so which variables you
+need depends on the spec. `specs/example-login.yaml` refers to `DEMO_EMAIL` and `DEMO_PASSWORD`;
+anything `npm run record` produces refers to `APP_EMAIL` and `APP_PASSWORD` instead.
+
+Set variables inline, or in a `.env` file (loaded automatically via `dotenv/config`). Copy the
+annotated template, which lists every variable above plus both credential pairs:
+
+```bash
+cp .env.example .env
+```
+
+Or pass them inline for a one-off run:
 
 ```bash
 BASE_URL=https://your-app.example.com \
