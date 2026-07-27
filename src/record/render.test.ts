@@ -59,6 +59,13 @@ test('renderSpec lists steps, actions and shots in order', () => {
   assert.ok(lines[5].includes('framed from "Address" (textbox) down'), lines[5]);
 });
 
+test('actions are numbered 1-based, so the review can name one to edit', () => {
+  const lines = renderSpec(SPEC);
+  assert.ok(lines[1].trimStart().startsWith('1) fill'), lines[1]);
+  assert.ok(lines[2].trimStart().startsWith('2) click'), lines[2]);
+  assert.ok(lines[4].trimStart().startsWith('1) fill'), lines[4]);
+});
+
 test('the render never leaks a credential value', () => {
   const rendered = renderSpec(SPEC).join('\n');
   assert.ok(rendered.includes('env:APP_EMAIL'));

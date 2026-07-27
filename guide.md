@@ -25,13 +25,29 @@ captorial's pipeline has three stages:
 
 ```
 record   headed browser: perform the flow once -> spec              (npm run record)
-review   read back the derived steps, confirm or discard            (inside npm run record)
+review   read back the derived steps, correct them, write or discard (inside npm run record)
 replay   drive the app from the spec, capture PNG + element bounds  (npm run replay)
 ```
 
-**Record** and **replay** exist today. Review is currently a read-back-and-confirm gate at the end
-of recording rather than a separate command: it prints the replayable steps and asks before writing
-anything. There is no per-step editing yet — to change a recorded step, edit the YAML by hand.
+**Record** and **replay** exist today. Review runs at the end of recording rather than as a separate
+command: it prints the replayable steps and takes commands against them before anything is written.
+
+```
+  d <n>        drop step n
+  s <n>        drop step n's screenshot, keeping its actions
+  m <n> <to>   move step n to position <to>
+  i <n>        rename step n's screenshot
+  c <n>        change how step n's screenshot is framed
+  v <n> <a>    change the value of action <a> in step n
+  w / q        write the spec / discard it
+```
+
+Locators are deliberately not editable. They are verified against the live DOM while you record, and
+the browser has closed by the time you review, so an edited locator would go out unverified — the
+drift semantic locators exist to catch. To change one, re-record the step or edit the YAML by hand.
+
+Dropping a step also drops any variable nothing references afterwards, so the credentials prompt at
+the end reflects what the spec still needs.
 
 You can also skip recording entirely and author a spec by hand, copying `specs/example-login.yaml`.
 

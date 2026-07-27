@@ -47,15 +47,17 @@ const describeShot = (shot: Shot): string => {
   return shot.crop;
 };
 
-const actionLine = (action: StepAction, vars: Record<string, SpecVar>): string =>
-  `    ${action.action.padEnd(7)} ${describeLocator(action.locator)}${describeValue(action.value, vars)}`;
+/** Numbered 1-based, so the review pass can name an action to edit. */
+const actionLine = (action: StepAction, index: number, vars: Record<string, SpecVar>): string =>
+  `    ${index + 1}) ${action.action.padEnd(7)} ` +
+  `${describeLocator(action.locator)}${describeValue(action.value, vars)}`;
 
 /** The replayable flow, one block per step. */
 export const renderSpec = (spec: CanonicalSpec): string[] => {
   const lines: string[] = [];
   spec.steps.forEach((step, index) => {
     lines.push(`Step ${index + 1}${step.page ? `  ->  ${step.page}` : ''}`);
-    for (const action of step.do ?? []) lines.push(actionLine(action, spec.vars));
+    (step.do ?? []).forEach((action, i) => lines.push(actionLine(action, i, spec.vars)));
     if (step.expect?.url) lines.push(`    expect  url matches ${step.expect.url}`);
     if (step.shot) lines.push(`    shot    ${step.shot.id} — ${describeShot(step.shot)}`);
   });

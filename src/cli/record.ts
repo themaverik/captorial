@@ -8,8 +8,10 @@
  *    top of the view, Ctrl+Shift+F marks a whole-page shot auto-tiled into overlapping frames.
  * 3. Derives a spec from what you did, naming each field's variable after its label and defaulting
  *    it to the value you typed.
- * 4. Prints the replayable steps for confirmation.
- * 5. On confirmation, writes specs/<tutorial>.yaml.
+ * 4. Prints the replayable steps and opens a review: drop a step or a screenshot, re-order, rename
+ *    or re-frame a screenshot, correct a value. Locators are not editable — they are verified
+ *    against the live DOM while recording, and by review the page has closed.
+ * 5. On write, saves specs/<tutorial>.yaml.
  *
  * Credentials are held in memory for the session only. They become env-sourced vars in the spec,
  * never literals, and a password's value never leaves the browser at all.
@@ -25,6 +27,7 @@ import { Writable } from 'node:stream';
 import { serializeSpec } from '../spec/serialize.js';
 import { parseSpec } from '../spec/validate.js';
 import { renderSpec, requiredEnvVars } from '../record/render.js';
+import { reviewSpec } from '../record/review.js';
 import { runSession } from '../record/session.js';
 import { SECRET_ENV, buildSpec } from '../record/stepBuilder.js';
 import { ensureDir, isWithinRoot, log, sanitizeName } from '../utils.js';
@@ -112,8 +115,6 @@ const run = async (): Promise<void> => {
     );
 
     const built = buildSpec(slug, session.events);
-    const yamlText = serializeSpec(built.spec);
-    const validation = parseSpec(yamlText);
 
     log.plain('');
     log.info(
@@ -124,20 +125,33 @@ const run = async (): Promise<void> => {
     for (const line of renderSpec(built.spec)) log.plain(line);
     log.plain('');
 
-    const envVars = requiredEnvVars(built.spec);
-    if (envVars.length) log.info(`Replay will read these from the environment: ${envVars.join(', ')}`);
     for (const warning of [...session.warnings, ...built.warnings]) log.warn(warning);
 
-    if (!validation.ok) {
-      log.error(`This flow did not produce a valid spec:\n- ${validation.errors.join('\n- ')}`);
+    // Validate what was recorded before offering to edit it: the review can correct a bad value or
+    // drop a bad step, but not a flow the observer failed to capture in the first place.
+    const recorded = parseSpec(serializeSpec(built.spec));
+    if (!recorded.ok) {
+      log.error(`This flow did not produce a valid spec:\n- ${recorded.errors.join('\n- ')}`);
       process.exitCode = 1;
       return;
     }
 
-    if (!isYes(await prompt.ask('\nWrite this spec? [y/N]'))) {
+    const reviewed = await reviewSpec(built.spec, prompt);
+    if (!reviewed) {
       log.info('Discarded; nothing written.');
       return;
     }
+
+    const yamlText = serializeSpec(reviewed);
+    const validation = parseSpec(yamlText);
+    if (!validation.ok) {
+      log.error(`The reviewed spec is not valid:\n- ${validation.errors.join('\n- ')}`);
+      process.exitCode = 1;
+      return;
+    }
+    const envVars = requiredEnvVars(reviewed);
+    if (envVars.length) log.info(`Replay will read these from the environment: ${envVars.join(', ')}`);
+
     if (fs.existsSync(dest)) {
       const relative = path.relative(process.cwd(), dest);
       if (!isYes(await prompt.ask(`${relative} already exists. Overwrite? [y/N]`))) {
