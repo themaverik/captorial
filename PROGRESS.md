@@ -15,6 +15,10 @@ The stable boundary is documented in `docs/transform-contract.md`.
 | D | Review CLI (draft spec → final spec) | [~] Editing pass landed inside `record`; smoke-tested with a scripted prompt, not yet used in a live recording |
 | E | Migration + CI (retire the legacy generators behind `--legacy`, replay in CI) | [ ] Pending |
 
+Everything above is merged to `main` and pushed: `f4e4aca` (anchored frames), `df977ec` (recorder),
+`88d86ee` (review pass), `639ea9e` (env template + guide). No phase is `[x]` beyond 0 and A, because
+B, C and D have all been verified against fixtures and scripted input rather than a live target app.
+
 ## What is app-agnostic now
 
 - `src/transform/` — viewport-grow, 16:9 tiling, anchored frames, screenshot storage. Pure geometry
@@ -30,6 +34,10 @@ The stable boundary is documented in `docs/transform-contract.md`.
   (`npm run record`).
 - `src/replay/` — `vars.ts`, `locator.ts`, `urlMatch.ts`, `runner.ts`, and a CLI entry
   `src/cli/replay.ts` (`npm run replay -- <spec.yaml>`).
+- Configuration — generic env only (`BASE_URL`, `OUTPUT_DIR`, `STORAGE_STATE`,
+  `DEVICE_SCALE_FACTOR`, `CROP_169`, `HEADED`, `SLOWMO`), documented in `.env.example`. Credentials
+  are not tool config: a spec's `vars` block names the variables it reads (`source: env:NAME`), so
+  no target-specific key is baked into the tool.
 
 ## Canonical spec format
 
