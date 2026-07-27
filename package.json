@@ -1,0 +1,23 @@
+{
+  "name": "captorial",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Automated tutorial-screenshot capture for web apps. Standalone; drives a live web app with Playwright from a canonical spec.",
+  "type": "module",
+  "scripts": {
+    "replay": "tsx src/cli/replay.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test src/**/*.test.ts"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "js-yaml": "^4.1.0",
+    "playwright": "^1.47.0"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^20.14.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.5.0"
+  }
+}

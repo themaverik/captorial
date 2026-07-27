@@ -1,0 +1,30 @@
+# Example canonical spec. One YAML file per tutorial is the only artifact the replay runner reads.
+# Locators resolve in order: role+name -> testid -> text. Values are literals or $var references.
+tutorial: example-login
+vars:
+  email:
+    type: fixed
+    source: env:DEMO_EMAIL          # pulled from the environment at replay time
+  password:
+    type: fixed
+    source: env:DEMO_PASSWORD
+  projectName:
+    type: fixed
+    value: Demo Project             # literal
+  runId:
+    type: generated
+    template: run-{date}            # regenerated per run
+steps:
+  - page: /login                    # page boundary; the runner asserts the URL
+    do:
+      - { action: fill, locator: { role: textbox, name: Email }, value: $email }
+      - { action: fill, locator: { role: textbox, name: Password }, value: $password }
+      - { action: click, locator: { role: button, name: Sign in } }
+    shot:
+      id: 01-login
+      crop: element
+      target: { testid: login-card }
+  - expect:
+      url: /projects/*
+      visible: { text: $projectName }
+    shot: { id: 02-detail, crop: element, target: { testid: project-header } }

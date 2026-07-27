@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.env
+.auth/
+_schema/
+tutorial-spec.yaml
+tutorials-output/
+replay-output/
+*.log
