@@ -34,11 +34,11 @@ nothing else — so the phase is now only the CI half.
   semantic locator), `verify.ts` (locator confirmed against the live DOM), `translate.ts`
   (interaction → recorded event), `stepBuilder.ts` (events → spec), `render.ts` (spec → review
   text), `edit.ts` (pure spec transforms for the review pass), `review.ts` (the review loop and its
-  command parser), `session.ts` (browser lifecycle). CLI entry `src/cli/record.ts`
-  (`npm run record`).
-- `src/replay/` — `vars.ts`, `locator.ts`, `urlMatch.ts`, `runner.ts`, and a CLI entry
-  `src/cli/replay.ts` (`npm run replay -- <spec.yaml>`).
-- Configuration — generic env only (`BASE_URL`, `OUTPUT_DIR`, `STORAGE_STATE`,
+  command parser), `authNav.ts` (single-use sign-in hops, filtered out), `session.ts` (browser
+  lifecycle). CLI entry `src/cli/record.ts` (`npm run record`).
+- `src/replay/` — `vars.ts`, `locator.ts`, `urlMatch.ts`, `display.ts` (viewport sizing), `runner.ts`,
+  and a CLI entry `src/cli/replay.ts` (`npm run replay -- <spec.yaml>`).
+- Configuration — generic env only (`BASE_URL`, `OUTPUT_DIR`, `STORAGE_STATE`, `VIEWPORT`,
   `DEVICE_SCALE_FACTOR`, `CROP_169`, `HEADED`, `SLOWMO`), documented in `.env.example`. Credentials
   are not tool config: a spec's `vars` block names the variables it reads (`source: env:NAME`), so
   no target-specific key is baked into the tool.

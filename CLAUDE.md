@@ -39,10 +39,19 @@ npm run typecheck                         # tsc --noEmit
 npm test                                  # node --import tsx --test (unit tests)
 ```
 
-Config is generic env only: `BASE_URL`, `OUTPUT_DIR`, `STORAGE_STATE`, `DEVICE_SCALE_FACTOR`,
-`CROP_169`, `HEADED`, `SLOWMO`. Never hardcode target URLs or entity values in the tool; put them in
-a spec's `vars` (fixed / `env:VAR` / generated). The recorder asks for the base URL and credentials
-interactively and emits them as `env:APP_EMAIL` / `env:APP_PASSWORD` vars — never as literals.
+Config is generic env only: `BASE_URL`, `OUTPUT_DIR`, `STORAGE_STATE`, `VIEWPORT`,
+`DEVICE_SCALE_FACTOR`, `CROP_169`, `HEADED`, `SLOWMO`. Never hardcode target URLs or entity values in
+the tool; put them in a spec's `vars` (fixed / `env:VAR` / generated). The recorder asks for the base
+URL and credentials interactively and emits them as `env:APP_EMAIL` / `env:APP_PASSWORD` vars — never
+as literals.
+
+Only replay sets a viewport. The recorder runs in the real maximised window (`viewport: null`), since
+a fixed viewport larger than the screen puts controls out of reach of the operator driving the flow.
+Replay re-measures anchors live, so the two need not match.
+
+Sign-in redirect hops are never recorded (`record/authNav.ts`): an authorization code, `state`, or
+PKCE challenge is single-use, so replaying that URL always fails. Replay visits the app and lets it
+start a fresh sign-in.
 
 Anything injected into the page must be a function with its data passed as an argument. tsx
 transpiles with esbuild's `keepNames`, whose `__name` helper does not survive serialisation, so
