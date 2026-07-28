@@ -102,6 +102,13 @@ export const buildSpec = (tutorial: string, events: RecordedEvent[]): BuildResul
     return current;
   };
 
+  /**
+   * The step being assembled when it is only a page nothing was recorded on — a hop in a redirect
+   * chain, which a following navigation should replace rather than close.
+   */
+  const redirectHop = (): Step | null =>
+    current && current.page && !current.do?.length && !current.shot ? current : null;
+
   const uniqueName = (base: string): string => {
     let name = base;
     let suffix = 2;
@@ -185,8 +192,16 @@ export const buildSpec = (tutorial: string, events: RecordedEvent[]): BuildResul
     if (event.kind === 'navigate') {
       // SPA routers commonly fire repeatedly for one route; only a real change starts a step.
       if (event.path === lastPath) continue;
-      closeStep();
-      current = { page: event.path };
+      // Nothing was recorded on the page we are leaving, so it was a hop in a redirect chain the app
+      // performed itself, not somewhere the flow did anything. Only where the chain settles earns a
+      // step; replay re-follows the redirects on its own.
+      const leaving = redirectHop();
+      if (leaving) {
+        current = { ...leaving, page: event.path };
+      } else {
+        closeStep();
+        current = { page: event.path };
+      }
       lastPath = event.path;
       lastFrame = null;
       continue;

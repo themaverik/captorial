@@ -15,14 +15,16 @@ import { PageTransform } from '../transform/index.js';
 import type { TileCaptureOptions } from '../transform/types.js';
 import { ensureDir, isWithinRoot, log, sanitizeName, writeJson } from '../utils.js';
 import type { CanonicalSpec, Shot, SpecLocator, Step, StepAction } from '../spec/types.js';
+import { DEFAULT_VIEWPORT, fitViewport, probeDisplay, type Viewport } from './display.js';
 import { resolveLocator } from './locator.js';
 import { resolveValue, resolveVars } from './vars.js';
-import { urlMatches } from './urlMatch.js';
+import { absoluteUrl, urlMatches } from './urlMatch.js';
 
 export interface ReplayConfig {
   /** Where screenshots + bounds sidecars are written. */
   outputDir: string;
-  viewport: { width: number; height: number };
+  /** Explicit capture viewport. Omitted: the canonical default, fitted to the display when headed. */
+  viewport?: Viewport;
   deviceScaleFactor: number;
   /** Options handed to the transform layer for `fullpage` shots. */
   transform: TileCaptureOptions;
@@ -46,12 +48,6 @@ export interface ReplayResult {
   shots: ShotResult[];
   warnings: string[];
 }
-
-const absoluteUrl = (pagePath: string, baseUrl?: string): string => {
-  if (/^https?:\/\//i.test(pagePath)) return pagePath;
-  if (!baseUrl) return pagePath;
-  return `${baseUrl.replace(/\/+$/, '')}/${pagePath.replace(/^\/+/, '')}`;
-};
 
 /** Perform one action against its resolved locator. Value references are already dereferenced. */
 const runAction = async (
@@ -178,6 +174,24 @@ const runShot = async (
   return { id, files, boundsFile };
 };
 
+/**
+ * The viewport to capture at. An explicit config value wins outright. Otherwise headless keeps the
+ * canonical size so output is identical on every machine, and headed fits the real display — the
+ * window has to show the page for a headed run to be worth watching.
+ */
+const resolveViewport = async (browser: Browser, config: ReplayConfig): Promise<Viewport> => {
+  if (config.viewport) return config.viewport;
+  if (!config.headed) return DEFAULT_VIEWPORT;
+  const fitted = fitViewport(DEFAULT_VIEWPORT, await probeDisplay(browser));
+  if (fitted.width !== DEFAULT_VIEWPORT.width || fitted.height !== DEFAULT_VIEWPORT.height) {
+    log.info(
+      `headed: display fits ${fitted.width}x${fitted.height}, not ` +
+        `${DEFAULT_VIEWPORT.width}x${DEFAULT_VIEWPORT.height} — set VIEWPORT to override`,
+    );
+  }
+  return fitted;
+};
+
 export const replaySpec = async (
   spec: CanonicalSpec,
   config: ReplayConfig,
@@ -194,10 +208,15 @@ export const replaySpec = async (
     throw new Error(`tutorial "${spec.tutorial}" resolves outside the output directory`);
   }
 
-  const browser: Browser = await chromium.launch({ headless: !config.headed, slowMo: config.slowMo });
+  const browser: Browser = await chromium.launch({
+    headless: !config.headed,
+    slowMo: config.slowMo,
+    args: config.headed ? ['--start-maximized'] : [],
+  });
+  const viewport = await resolveViewport(browser, config);
   const context = await browser.newContext({
     storageState: config.storageState && fs.existsSync(config.storageState) ? config.storageState : undefined,
-    viewport: config.viewport,
+    viewport,
     deviceScaleFactor: config.deviceScaleFactor,
   });
   const page = await context.newPage();

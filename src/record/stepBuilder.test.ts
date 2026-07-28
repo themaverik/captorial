@@ -29,6 +29,34 @@ test('a navigation starts a step and a shot closes it', () => {
   assert.equal(spec.steps[1].do?.length, 1);
 });
 
+test('a redirect chain collapses to where it settles', () => {
+  const events: RecordedEvent[] = [
+    { kind: 'navigate', path: '/' },
+    { kind: 'navigate', path: '/app' },
+    { kind: 'navigate', path: '/app/home' },
+    { kind: 'action', action: 'click', locator: SIGN_IN },
+  ];
+  const { spec } = buildSpec('t', events);
+  // Nothing happened on the intermediate hops, so only the settled page earns a step.
+  assert.equal(spec.steps.length, 1);
+  assert.equal(spec.steps[0].page, '/app/home');
+});
+
+test('a navigation still starts a step when the page before it was used', () => {
+  const events: RecordedEvent[] = [
+    { kind: 'navigate', path: '/login' },
+    { kind: 'action', action: 'click', locator: SIGN_IN },
+    { kind: 'navigate', path: '/home' },
+    { kind: 'action', action: 'click', locator: SIGN_IN },
+  ];
+  const { spec } = buildSpec('t', events);
+  assert.equal(spec.steps.length, 2);
+  assert.deepEqual(
+    spec.steps.map((step) => step.page),
+    ['/login', '/home'],
+  );
+});
+
 test('consecutive navigations to the same path collapse into one step', () => {
   const events: RecordedEvent[] = [
     { kind: 'navigate', path: '/projects' },

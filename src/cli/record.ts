@@ -32,8 +32,6 @@ import { runSession } from '../record/session.js';
 import { SECRET_ENV, buildSpec } from '../record/stepBuilder.js';
 import { ensureDir, isWithinRoot, log, sanitizeName } from '../utils.js';
 
-/** Matches the replay CLI, so a frame recorded here is framed the same way on replay. */
-const VIEWPORT = { width: 1920, height: 1080 };
 const ASPECT = { width: 16, height: 9 };
 const SPECS_DIR = path.resolve('specs');
 
@@ -105,7 +103,6 @@ const run = async (): Promise<void> => {
         baseUrl,
         email,
         password,
-        viewport: VIEWPORT,
         aspectWidth: ASPECT.width,
         aspectHeight: ASPECT.height,
         storageState: process.env.STORAGE_STATE,
