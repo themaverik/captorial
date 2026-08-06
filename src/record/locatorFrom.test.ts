@@ -73,12 +73,35 @@ test('locatorFor stores every candidate tier it can', () => {
 });
 
 test('locatorFor omits role+name when either half is missing', () => {
-  // A password field has no role, so only the testid tier survives.
+  // A password field has no role, so the testid and label tiers are what survive.
   const locator = locatorFor(
     describe({ tag: 'input', inputType: 'password', isPassword: true, testid: 'pw', labelText: 'Password' }),
   );
-  assert.deepEqual(locator, { testid: 'pw' });
+  assert.deepEqual(locator, { testid: 'pw', label: 'Password' });
   assert.equal(hasCandidate(locator), true);
+});
+
+test('locatorFor gives a labelled password field a candidate without a testid', () => {
+  // The gap that made a labelled sign-in form unrecordable: no role, no testid, no usable text.
+  const locator = locatorFor(
+    describe({ tag: 'input', inputType: 'password', isPassword: true, labelText: 'Password' }),
+  );
+  assert.deepEqual(locator, { label: 'Password' });
+  assert.equal(hasCandidate(locator), true);
+});
+
+test('locatorFor takes the label tier from aria-label when there is no native label', () => {
+  const locator = locatorFor(
+    describe({ tag: 'input', inputType: 'file', ariaLabel: 'Attach a photo' }),
+  );
+  assert.deepEqual(locator, { label: 'Attach a photo' });
+});
+
+test('locatorFor offers no label tier for an element a label cannot name', () => {
+  assert.deepEqual(locatorFor(describe({ tag: 'button', ariaLabel: 'Close' })), {
+    role: 'button',
+    name: 'Close',
+  });
 });
 
 test('locatorFor never uses a form control\'s text as a locator', () => {
@@ -86,7 +109,7 @@ test('locatorFor never uses a form control\'s text as a locator', () => {
   const locator = locatorFor(
     describe({ tag: 'select', labelText: 'Country', text: 'Choose Norway United Kingdom' }),
   );
-  assert.deepEqual(locator, { role: 'combobox', name: 'Country' });
+  assert.deepEqual(locator, { role: 'combobox', name: 'Country', label: 'Country' });
 });
 
 test('locatorFor drops long text rather than storing prose as a locator', () => {

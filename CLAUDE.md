@@ -27,8 +27,9 @@ The transform layer is the stable boundary the whole pipeline feeds. Its contrac
 - Many small, cohesive files (200-400 lines typical). Immutable data — return new objects, don't mutate.
 - No new heavyweight dependencies. The spec validator is hand-rolled on purpose (no zod). Ask before
   adding anything beyond playwright / js-yaml / dotenv / tsx.
-- Locators are semantic only: resolve role+name -> testid -> text. Never author raw CSS or XPath tied
-  to DOM structure; the runner logs which tier it used so drift is visible before it breaks.
+- Locators are semantic only: role+name -> testid -> label -> text, optionally scoped by `within`
+  (itself a semantic locator). Never author raw CSS or XPath tied to DOM structure; the runner logs
+  which tier it used so drift is visible before it breaks.
 
 ## Commands
 
@@ -39,10 +40,25 @@ npm run typecheck                         # tsc --noEmit
 npm test                                  # node --import tsx --test (unit tests)
 ```
 
-Config is generic env only: `BASE_URL`, `OUTPUT_DIR`, `STORAGE_STATE`, `DEVICE_SCALE_FACTOR`,
-`CROP_169`, `HEADED`, `SLOWMO`. Never hardcode target URLs or entity values in the tool; put them in
-a spec's `vars` (fixed / `env:VAR` / generated). The recorder asks for the base URL and credentials
-interactively and emits them as `env:APP_EMAIL` / `env:APP_PASSWORD` vars — never as literals.
+Config is generic env only: `BASE_URL`, `OUTPUT_DIR`, `STORAGE_STATE`, `VIEWPORT`,
+`DEVICE_SCALE_FACTOR`, `CROP_169`, `HEADED`, `SLOWMO`. Never hardcode target URLs or entity values in
+the tool; put them in a spec's `vars` (fixed / `env:VAR` / generated). The recorder asks for the base
+URL and credentials interactively and emits them as `env:APP_EMAIL` / `env:APP_PASSWORD` vars — never
+as literals.
+
+Only replay sets a viewport. The recorder runs in the real maximised window (`viewport: null`), since
+a fixed viewport larger than the screen puts controls out of reach of the operator driving the flow.
+Replay re-measures anchors live, so the two need not match.
+
+Sign-in redirect hops are never recorded (`record/authNav.ts`): an authorization code, `state`, or
+PKCE challenge is single-use, so replaying that URL always fails. Replay visits the app and lets it
+start a fresh sign-in.
+
+A step's `page:` is an instruction to visit; `expect.url` is an assertion about where the flow
+landed. The recorder emits `page:` only for a page opened directly, and `expect.url` for one the
+step's own actions navigated to — with server-generated path segments globbed (`/tasks/<uuid>` ->
+`/tasks/*`, see `generalisePath`). Recording an outcome as an instruction pins every later run to
+the entity that existed while recording.
 
 Anything injected into the page must be a function with its data passed as an argument. tsx
 transpiles with esbuild's `keepNames`, whose `__name` helper does not survive serialisation, so

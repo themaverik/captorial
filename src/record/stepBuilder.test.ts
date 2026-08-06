@@ -8,7 +8,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { validateSpec } from '../spec/validate.js';
-import { buildSpec, type RecordedEvent } from './stepBuilder.js';
+import { buildSpec, generalisePath, type RecordedEvent } from './stepBuilder.js';
 
 const EMAIL_BOX = { role: 'textbox', name: 'Email' };
 const SIGN_IN = { role: 'button', name: 'Sign in' };
@@ -27,6 +27,72 @@ test('a navigation starts a step and a shot closes it', () => {
   // The action after the shot lands in a fresh step, since a step holds at most one shot.
   assert.equal(spec.steps[1].page, undefined);
   assert.equal(spec.steps[1].do?.length, 1);
+});
+
+test('a redirect chain collapses to where it settles', () => {
+  const events: RecordedEvent[] = [
+    { kind: 'navigate', path: '/' },
+    { kind: 'navigate', path: '/app' },
+    { kind: 'navigate', path: '/app/home' },
+    { kind: 'action', action: 'click', locator: SIGN_IN },
+  ];
+  const { spec } = buildSpec('t', events);
+  // Nothing happened on the intermediate hops, so only the settled page earns a step.
+  assert.equal(spec.steps.length, 1);
+  assert.equal(spec.steps[0].page, '/app/home');
+});
+
+test('a navigation the flow caused is asserted, not navigated to', () => {
+  const events: RecordedEvent[] = [
+    { kind: 'navigate', path: '/login' },
+    { kind: 'action', action: 'click', locator: SIGN_IN },
+    { kind: 'navigate', path: '/home' },
+    { kind: 'action', action: 'click', locator: SIGN_IN },
+  ];
+  const { spec } = buildSpec('t', events);
+  assert.equal(spec.steps.length, 2);
+  // The entry point is opened directly; replay reaches /home by repeating the click that led there.
+  assert.equal(spec.steps[0].page, '/login');
+  assert.equal(spec.steps[1].page, undefined);
+  assert.deepEqual(spec.steps[1].expect, { url: '/home' });
+});
+
+test('a generated id in a flow-caused path is globbed, so it is not pinned to one run', () => {
+  const events: RecordedEvent[] = [
+    { kind: 'navigate', path: '/tasks' },
+    { kind: 'action', action: 'click', locator: SIGN_IN },
+    { kind: 'navigate', path: '/tasks/de165681-24c2-45e1-8531-0065f4757158' },
+    { kind: 'action', action: 'click', locator: SIGN_IN },
+  ];
+  const { spec } = buildSpec('t', events);
+  assert.deepEqual(spec.steps[1].expect, { url: '/tasks/*' });
+});
+
+test('generalisePath globs generated segments and drops the query', () => {
+  assert.equal(generalisePath('/ops/tasks'), '/ops/tasks');
+  assert.equal(
+    generalisePath('/ops/tasks/de165681-24c2-45e1-8531-0065f4757158'),
+    '/ops/tasks/*',
+  );
+  assert.equal(generalisePath('/orders/1042/lines'), '/orders/*/lines');
+  assert.equal(generalisePath('/ops/tasks/create?taskTypeId=5ad6392d-a276-4e98-8951-61f4704'), '/ops/tasks/create');
+  // A word segment is part of the route, not an id, however long it is.
+  assert.equal(generalisePath('/ops/plantation-activities'), '/ops/plantation-activities');
+});
+
+test('a redirect chain the flow started stays an assertion all the way to where it settles', () => {
+  const events: RecordedEvent[] = [
+    { kind: 'navigate', path: '/login' },
+    { kind: 'action', action: 'click', locator: SIGN_IN },
+    { kind: 'navigate', path: '/auth/callback' },
+    { kind: 'navigate', path: '/home' },
+    { kind: 'action', action: 'click', locator: SIGN_IN },
+  ];
+  const { spec } = buildSpec('t', events);
+  assert.equal(spec.steps.length, 2);
+  // Never a `page:` for the mid-chain hop — replaying that URL is what breaks a sign-in.
+  assert.equal(spec.steps[1].page, undefined);
+  assert.deepEqual(spec.steps[1].expect, { url: '/home' });
 });
 
 test('consecutive navigations to the same path collapse into one step', () => {
@@ -131,6 +197,20 @@ test('an anchored shot with no resolvable anchor is dropped rather than emitted 
   const { spec, warnings } = buildSpec('t', [{ kind: 'shot', crop: 'anchored' }]);
   assert.equal(spec.steps.length, 0);
   assert.ok(warnings.some((w) => /anchor/i.test(w)), warnings.join('\n'));
+});
+
+test('a flow ending on a navigation keeps that landing as a step the validator accepts', () => {
+  const events: RecordedEvent[] = [
+    { kind: 'navigate', path: '/tasks/new' },
+    { kind: 'action', action: 'click', locator: SIGN_IN },
+    { kind: 'navigate', path: '/tasks/7f3a1c2b9e0d4a6f8b5c3e1d' },
+  ];
+  const { spec } = buildSpec('t', events);
+  // Saving as the last act leaves a step that only asserts where it landed; it must still survive.
+  assert.equal(spec.steps.length, 2);
+  assert.deepEqual(spec.steps[1], { expect: { url: '/tasks/*' } });
+  const result = validateSpec(JSON.parse(JSON.stringify(spec)));
+  assert.equal(result.ok, true, result.ok ? '' : result.errors.join('\n'));
 });
 
 test('a recorded flow assembles into a spec its own validator accepts', () => {

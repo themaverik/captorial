@@ -7,6 +7,8 @@
  *   BASE_URL            base for relative `page:` paths and URL assertions
  *   OUTPUT_DIR          where screenshots + bounds sidecars are written (default ./replay-output)
  *   STORAGE_STATE       Playwright storage-state file for an authenticated session (optional)
+ *   VIEWPORT            capture viewport as WIDTHxHEIGHT (default 1920x1080, fitted to the display
+ *                       when headed so the window can show the whole page)
  *   DEVICE_SCALE_FACTOR screenshot DPI multiplier (default 1)
  *   CROP_169            crop full-page shots to 16:9 tiles (default true)
  *   HEADED, SLOWMO      run headed / slow down actions for debugging
@@ -16,14 +18,13 @@ import 'dotenv/config';
 import fs from 'node:fs';
 import path from 'node:path';
 import { parseSpec } from '../spec/validate.js';
+import { parseViewport } from '../replay/display.js';
 import { replaySpec, type ReplayConfig } from '../replay/index.js';
 import { log } from '../utils.js';
 
-const VIEWPORT = { width: 1920, height: 1080 };
-
 const buildConfig = (): ReplayConfig => ({
   outputDir: path.resolve(process.env.OUTPUT_DIR || 'replay-output'),
-  viewport: VIEWPORT,
+  viewport: parseViewport(process.env.VIEWPORT),
   deviceScaleFactor: Math.max(1, Number(process.env.DEVICE_SCALE_FACTOR || 1)),
   baseUrl: process.env.BASE_URL,
   storageState: process.env.STORAGE_STATE,
@@ -46,6 +47,16 @@ const run = async (): Promise<void> => {
   const result = parseSpec(fs.readFileSync(specPath, 'utf8'));
   if (!result.ok) {
     throw new Error(`Invalid spec ${specPath}:\n- ${result.errors.join('\n- ')}`);
+  }
+
+  // Capturing nothing is a valid spec but never an intended one, and the run takes just as long to
+  // find out. Say so before the browser starts rather than after.
+  if (!result.spec.steps.some((step) => step.shot)) {
+    log.warn(
+      `"${result.spec.tutorial}" declares no shots, so this run will drive the flow and capture ` +
+        `nothing. Mark frames while recording with Ctrl+Shift+S / Ctrl+Shift+F, or add a "shot:" ` +
+        `to a step by hand.`,
+    );
   }
 
   const config = buildConfig();

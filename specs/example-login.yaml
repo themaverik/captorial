@@ -1,5 +1,5 @@
 # Example canonical spec. One YAML file per tutorial is the only artifact the replay runner reads.
-# Locators resolve in order: role+name -> testid -> text. Values are literals or $var references.
+# Locators resolve in order: role+name -> testid -> label -> text. Values are literals or $vars.
 tutorial: example-login
 vars:
   email:

@@ -15,6 +15,38 @@ import { parseSpec, validateSpec } from './validate.js';
 const dirname = path.dirname(fileURLToPath(import.meta.url));
 const exampleSpecPath = path.resolve(dirname, '..', '..', 'specs', 'example-login.yaml');
 
+const specWithLocator = (locator: unknown): unknown => ({
+  tutorial: 't',
+  vars: {},
+  steps: [{ do: [{ action: 'click', locator }] }],
+});
+
+test('a within scope is accepted when it can be located itself', () => {
+  const result = validateSpec(
+    specWithLocator({ text: 'Select species', within: { testid: 'species-0' } }),
+  );
+  assert.equal(result.ok, true, result.ok ? '' : result.errors.join('\n'));
+});
+
+test('a within scope with no candidate of its own is rejected', () => {
+  // A scope that resolves to nothing silently widens the search back to the whole page.
+  const result = validateSpec(specWithLocator({ text: 'Select', within: { nth: 0 } }));
+  assert.equal(result.ok, false);
+  assert.ok(
+    !result.ok && result.errors.some((e) => /\.within: locator needs/.test(e)),
+    result.ok ? '' : result.errors.join('\n'),
+  );
+});
+
+test('an unknown locator key is rejected rather than dropped on serialisation', () => {
+  const result = validateSpec(specWithLocator({ text: 'Select', selector: '.btn' }));
+  assert.equal(result.ok, false);
+  assert.ok(
+    !result.ok && result.errors.some((e) => /unknown key "selector"/.test(e)),
+    result.ok ? '' : result.errors.join('\n'),
+  );
+});
+
 test('the bundled example spec validates', () => {
   const result = parseSpec(fs.readFileSync(exampleSpecPath, 'utf8'));
   assert.equal(result.ok, true, result.ok ? '' : result.errors.join('\n'));
@@ -113,4 +145,29 @@ test('an unknown crop mode is rejected', () => {
     steps: [{ shot: { id: 's', crop: 'panorama' } }],
   });
   assert.equal(result.ok, false);
+});
+
+test('an unknown top-level key is rejected rather than dropped', () => {
+  const result = validateSpec({ tutorial: 't', vars: {}, steps: [{ page: '/x' }], roles: ['a'] });
+  assert.equal(result.ok, false);
+  if (result.ok) return;
+  assert.ok(result.errors.includes('spec: unknown key "roles"'), result.errors.join('\n'));
+});
+
+test('an unknown step-level key is rejected rather than passed through', () => {
+  const result = validateSpec({
+    tutorial: 't',
+    vars: {},
+    steps: [{ page: '/x', onlyFor: ['a'] }],
+  });
+  assert.equal(result.ok, false);
+  if (result.ok) return;
+  assert.ok(result.errors.includes('steps[0]: unknown key "onlyFor"'), result.errors.join('\n'));
+});
+
+test('a misspelled key is named in the error', () => {
+  const result = validateSpec({ tutorial: 't', vars: {}, stpes: [{ page: '/x' }] });
+  assert.equal(result.ok, false);
+  if (result.ok) return;
+  assert.ok(result.errors.some((e) => /stpes/.test(e)), result.errors.join('\n'));
 });

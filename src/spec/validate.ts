@@ -24,7 +24,14 @@ export type ValidationResult =
 
 const ACTIONS: ReadonlyArray<ActionType> = ['fill', 'click', 'select', 'check', 'upload', 'press'];
 const CROP_MODES: ReadonlyArray<CropMode> = ['element', 'viewport', 'fullpage', 'anchored'];
-const LOCATOR_KEYS = ['role', 'name', 'testid', 'text'] as const;
+const LOCATOR_KEYS = ['role', 'name', 'testid', 'label', 'text'] as const;
+/**
+ * The keys each level accepts. A spec is rebuilt from known keys on the way out, so anything not
+ * listed here would otherwise be dropped in silence — a typo and a half-implemented feature look
+ * identical. New fields become legal by being added here.
+ */
+const TOP_KEYS = ['tutorial', 'vars', 'steps'] as const;
+const STEP_KEYS = ['page', 'expect', 'do', 'shot'] as const;
 
 const isObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -32,19 +39,39 @@ const isObject = (value: unknown): value is Record<string, unknown> =>
 const isNonEmptyString = (value: unknown): value is string =>
   typeof value === 'string' && value.trim().length > 0;
 
-/** A locator needs at least one candidate the runner can resolve. */
+const rejectUnknownKeys = (
+  raw: Record<string, unknown>,
+  allowed: ReadonlyArray<string>,
+  at: string,
+  errors: string[],
+): void => {
+  for (const key of Object.keys(raw)) {
+    if (!allowed.includes(key)) errors.push(`${at}: unknown key "${key}"`);
+  }
+};
+
+/** Every key a locator accepts: the candidate tiers, plus scoping and disambiguation. */
+const LOCATOR_ALL_KEYS = [...LOCATOR_KEYS, 'within', 'nth'] as const;
+
+/**
+ * A locator needs at least one candidate the runner can resolve. `within` is validated as a locator
+ * in its own right — it has to resolve to the element the tiers are searched inside, so a scope with
+ * no candidate of its own would silently widen the search back to the whole page.
+ */
 const validateLocator = (raw: unknown, at: string, errors: string[]): void => {
   if (!isObject(raw)) {
     errors.push(`${at}: locator must be an object`);
     return;
   }
+  rejectUnknownKeys(raw, LOCATOR_ALL_KEYS, at, errors);
   const hasCandidate = LOCATOR_KEYS.some((key) => isNonEmptyString(raw[key]));
   if (!hasCandidate) {
-    errors.push(`${at}: locator needs at least one of role/name/testid/text`);
+    errors.push(`${at}: locator needs at least one of role/name/testid/label/text`);
   }
   if (raw.nth !== undefined && !Number.isInteger(raw.nth)) {
     errors.push(`${at}: locator.nth must be an integer`);
   }
+  if (raw.within !== undefined) validateLocator(raw.within, `${at}.within`, errors);
 };
 
 const validateVar = (name: string, raw: unknown, errors: string[]): void => {
@@ -112,6 +139,7 @@ const validateStep = (raw: unknown, index: number, varNames: Set<string>, errors
     errors.push(`${at}: step must be an object`);
     return;
   }
+  rejectUnknownKeys(raw, STEP_KEYS, at, errors);
   if (raw.page === undefined && raw.expect === undefined && raw.do === undefined && raw.shot === undefined) {
     errors.push(`${at}: step needs at least one of page/expect/do/shot`);
   }
@@ -134,6 +162,7 @@ export const validateSpec = (raw: unknown): ValidationResult => {
   if (!isObject(raw)) {
     return { ok: false, errors: ['spec must be a YAML object'] };
   }
+  rejectUnknownKeys(raw, TOP_KEYS, 'spec', errors);
 
   if (!isNonEmptyString(raw.tutorial)) errors.push('tutorial: must be a non-empty string');
 

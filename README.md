@@ -35,6 +35,7 @@ Config is read from generic environment variables only:
 | `BASE_URL` | Base for relative `page:` paths and URL assertions |
 | `OUTPUT_DIR` | Where screenshots and bounds sidecars are written (default `./replay-output`) |
 | `STORAGE_STATE` | Playwright storage-state file for an authenticated session (optional) |
+| `VIEWPORT` | Capture viewport as `WIDTHxHEIGHT` (default `1920x1080`, fitted to the display when headed) |
 | `DEVICE_SCALE_FACTOR` | Screenshot DPI multiplier (default 1) |
 | `CROP_169` | Crop full-page shots to 16:9 tiles (default true) |
 | `HEADED`, `SLOWMO` | Run headed / slow actions for debugging |
@@ -59,8 +60,10 @@ steps:
     shot:   { id: 02-detail, crop: element, target: { testid: project-header } }
 ```
 
-Locators resolve in order role+name → testid → text; the runner logs which tier it used so drift is
-visible before it becomes breakage. See `specs/example-login.yaml`.
+Locators resolve in order role+name → testid → label → text; the runner logs which tier it used so
+drift is visible before it becomes breakage. The `label` tier is what reaches a control with no
+implicit ARIA role — a password or file input — which nothing else can locate without a testid. See
+`specs/example-login.yaml`.
 
 ## Development
 

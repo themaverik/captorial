@@ -31,7 +31,12 @@ export const resolveVar = (name: string, spec: SpecVar, ctx: VarContext): string
   if (spec.source) {
     const key = spec.source.replace(/^env:/, '');
     const value = ctx.env[key];
-    if (value === undefined) throw new Error(`var "${name}": environment variable ${key} is not set`);
+    // Blank counts as unset. `.env.example` is copied with every key present and empty, so an
+    // unfilled one arrives as "" rather than undefined — and silently filling a credential field
+    // with nothing surfaces much later as whatever the app does to a failed sign-in.
+    if (value === undefined || value.trim() === '') {
+      throw new Error(`var "${name}": environment variable ${key} is empty or not set`);
+    }
     return value;
   }
   return spec.value ?? '';

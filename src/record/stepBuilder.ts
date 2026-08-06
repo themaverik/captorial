@@ -66,6 +66,30 @@ export interface BuildResult {
   warnings: string[];
 }
 
+/**
+ * Path segments a server generated for one particular record: a uuid, a long hex id, or a bare
+ * number. A recorded path containing one addresses the entity that existed while recording, so
+ * navigating to it on a later run reaches that same entity rather than the one the flow just made.
+ */
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const LONG_HEX = /^[0-9a-f]{16,}$/i;
+const NUMERIC = /^\d+$/;
+
+const looksGenerated = (segment: string): boolean =>
+  UUID.test(segment) || LONG_HEX.test(segment) || NUMERIC.test(segment);
+
+/**
+ * A recorded path as a glob for `expect.url`: generated segments become `*`. The query is dropped
+ * because the runner matches a pattern without a scheme against the pathname alone, and because a
+ * query commonly carries the same one-run ids the path does.
+ */
+export const generalisePath = (path: string): string =>
+  path
+    .split('?')[0]
+    .split('/')
+    .map((segment) => (looksGenerated(segment) ? '*' : segment))
+    .join('/');
+
 /** Turn a label into a filename-safe slug for a shot id. */
 const slugify = (value: string): string =>
   sanitizeName(value)
@@ -93,7 +117,9 @@ export const buildSpec = (tutorial: string, events: RecordedEvent[]): BuildResul
   let lastFrame: { top: number; height: number } | null = null;
 
   const closeStep = (): void => {
-    if (current && (current.page || current.do?.length || current.shot)) steps.push(current);
+    if (current && (current.page || current.expect || current.do?.length || current.shot)) {
+      steps.push(current);
+    }
     current = null;
   };
 
@@ -101,6 +127,18 @@ export const buildSpec = (tutorial: string, events: RecordedEvent[]): BuildResul
     if (!current) current = {};
     return current;
   };
+
+  /**
+   * The step being assembled when it is only a page nothing was recorded on — a hop in a redirect
+   * chain, which a following navigation should replace rather than close.
+   */
+  const redirectHop = (): Step | null =>
+    current && (current.page || current.expect) && !current.do?.length && !current.shot
+      ? current
+      : null;
+
+  /** Whether the step being assembled did anything, and so caused the navigation leaving it. */
+  const hasActions = (step: Step | null): boolean => Boolean(step?.do?.length);
 
   const uniqueName = (base: string): string => {
     let name = base;
@@ -185,8 +223,25 @@ export const buildSpec = (tutorial: string, events: RecordedEvent[]): BuildResul
     if (event.kind === 'navigate') {
       // SPA routers commonly fire repeatedly for one route; only a real change starts a step.
       if (event.path === lastPath) continue;
-      closeStep();
-      current = { page: event.path };
+      // Nothing was recorded on the page we are leaving, so it was a hop in a redirect chain the app
+      // performed itself, not somewhere the flow did anything. Only where the chain settles earns a
+      // step; replay re-follows the redirects on its own.
+      const leaving = redirectHop();
+      if (leaving) {
+        // Still settling, so carry the hop forward in whichever form it started as.
+        current = leaving.page
+          ? { ...leaving, page: event.path }
+          : { ...leaving, expect: { ...leaving.expect, url: generalisePath(event.path) } };
+      } else {
+        // The flow's own actions caused this navigation, so replay arrives here by repeating them.
+        // Assert where that lands instead of navigating: a recorded path naming an entity created
+        // during recording would send every later run back to that same entity.
+        const arrivedByFlow = hasActions(current);
+        closeStep();
+        current = arrivedByFlow
+          ? { expect: { url: generalisePath(event.path) } }
+          : { page: event.path };
+      }
       lastPath = event.path;
       lastFrame = null;
       continue;

@@ -9,6 +9,7 @@
 import fs from 'node:fs';
 import { chromium } from 'playwright';
 import { log } from '../utils.js';
+import { isAuthNavigation } from './authNav.js';
 import { installObserver, SHOT_KEYS } from './observer.js';
 import type { RecordedEvent } from './stepBuilder.js';
 import { createTranslator } from './translate.js';
@@ -18,7 +19,6 @@ export interface RecordConfig {
   /** Credentials the flow signs in with. Held in memory only; never written to a spec. */
   email: string;
   password: string;
-  viewport: { width: number; height: number };
   aspectWidth: number;
   aspectHeight: number;
   /** Playwright storage-state file for an already-authenticated session. */
@@ -69,26 +69,54 @@ export const runSession = async (
         seen.add(message);
         warnings.push(message);
       },
-      skip: () => {
+      skip: (message) => {
         skipped += 1;
+        // Deduped like a warning: one unrecordable control touched repeatedly is one thing to fix,
+        // but two different ones are two, and a tally could never tell them apart.
+        if (seen.has(message)) return;
+        seen.add(message);
+        warnings.push(message);
       },
       note: (message) => log.step(message),
     },
   );
 
-  const browser = await chromium.launch({ headless: false, slowMo: config.slowMo });
+  // The recorder is driven by hand, so the viewport must be the window the operator can actually
+  // reach. A fixed viewport larger than the screen lays the page out beyond the window with no
+  // scrollbars, putting controls out of reach. `null` tracks the maximised window instead; replay
+  // sets its own capture viewport and re-measures anchors live, so nothing here has to match it.
+  const browser = await chromium.launch({
+    headless: false,
+    slowMo: config.slowMo,
+    args: ['--start-maximized'],
+  });
   const context = await browser.newContext({
-    viewport: config.viewport,
+    viewport: null,
     storageState:
       config.storageState && fs.existsSync(config.storageState) ? config.storageState : undefined,
   });
-  await installObserver(context, translate);
+  const enqueue = await installObserver(context, translate);
 
   const page = await context.newPage();
+  let droppedAuthHops = 0;
   page.on('framenavigated', (frame) => {
     if (frame !== page.mainFrame()) return;
     const path = relativePath(frame.url(), config.baseUrl);
-    if (path) events.push({ kind: 'navigate', path });
+    if (!path) return;
+    // A hop in a sign-in exchange is bound to this one attempt and can never be replayed, and its
+    // query carries a credential. Drop it here so it never reaches the event stream or the spec:
+    // replay visits the app and lets it start a fresh sign-in instead.
+    if (isAuthNavigation(path)) {
+      droppedAuthHops += 1;
+      return;
+    }
+    // Through the observer's queue, not straight onto the array: the click that caused this
+    // navigation is still being verified, and appending here would order the destination page
+    // ahead of the click that led to it — which replays as a step whose first action belongs to
+    // the page before it.
+    void enqueue(() => {
+      events.push({ kind: 'navigate', path });
+    });
   });
 
   await page.goto(config.baseUrl, { waitUntil: 'domcontentloaded' });
@@ -103,9 +131,15 @@ export const runSession = async (
   });
   if (browser.isConnected()) await browser.close();
 
+  if (droppedAuthHops) {
+    log.step(
+      `${droppedAuthHops} sign-in redirect(s) were not recorded — replay signs in through the app`,
+    );
+  }
   if (skipped) {
     warnings.push(
-      `${skipped} interaction(s) were skipped: no role+name, data-testid, or short text to locate them by`,
+      `${skipped} interaction(s) could not be recorded; each distinct one is listed above. A flow ` +
+        `missing the click that opens a menu replays against a closed one.`,
     );
   }
   return { events, warnings };

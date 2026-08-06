@@ -23,7 +23,7 @@ import type {
 
 const HEADER = [
   '# Canonical spec. One YAML file per tutorial is the only artifact the replay runner reads.',
-  '# Locators resolve in order: role+name -> testid -> text. Values are literals or $var references.',
+  '# Locators resolve in order: role+name -> testid -> label -> text. Values are literals or $vars.',
   '# Credentials are read from the environment at replay time; no secret is stored in this file.',
 ].join('\n');
 
@@ -36,7 +36,9 @@ const orderLocator = (locator: SpecLocator): Record<string, unknown> =>
     role: locator.role,
     name: locator.name,
     testid: locator.testid,
+    label: locator.label,
     text: locator.text,
+    within: locator.within && orderLocator(locator.within),
     nth: locator.nth,
   });
 

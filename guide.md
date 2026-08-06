@@ -272,6 +272,7 @@ product-specific is hardcoded:
 | `BASE_URL` | Base for relative `page:` paths and URL assertions |
 | `OUTPUT_DIR` | Where screenshots and bounds sidecars are written (default `./replay-output`) |
 | `STORAGE_STATE` | Playwright storage-state file for an authenticated session (optional) |
+| `VIEWPORT` | Capture viewport as `WIDTHxHEIGHT` (default `1920x1080`, fitted to the display when headed) |
 | `DEVICE_SCALE_FACTOR` | Screenshot DPI multiplier (default 1) |
 | `CROP_169` | Crop full-page shots to 16:9 tiles (default true) |
 | `HEADED`, `SLOWMO` | Run headed / slow down actions for debugging |
