@@ -31,6 +31,13 @@ test('resolveVars fails fast when an env source is missing', () => {
   assert.throws(() => resolveVars(vars, { env: {}, now: clock }), /MISSING/);
 });
 
+test('resolveVars treats a blank env source as unset', () => {
+  // How an unfilled .env arrives: the key is present and empty, not absent.
+  const vars: Record<string, SpecVar> = { password: { type: 'fixed', source: 'env:BLANK' } };
+  assert.throws(() => resolveVars(vars, { env: { BLANK: '' }, now: clock }), /BLANK/);
+  assert.throws(() => resolveVars(vars, { env: { BLANK: '   ' }, now: clock }), /BLANK/);
+});
+
 test('resolveValue dereferences a $var and passes literals through', () => {
   const resolved = { email: 'a@b.co' };
   assert.equal(resolveValue('$email', resolved), 'a@b.co');

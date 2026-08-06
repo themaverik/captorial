@@ -40,3 +40,19 @@ const safePath = (url: string): string => {
     return url;
   }
 };
+
+/**
+ * True when two URLs address the same page: same origin and path, ignoring the query and fragment.
+ * Used to tell "the app already took us where the step wanted" from "we ended up somewhere else",
+ * without treating a session id or a tracking parameter as a different page.
+ */
+export const samePage = (a: string, b: string): boolean => {
+  try {
+    const left = new URL(a);
+    const right = new URL(b);
+    const trim = (p: string): string => (p.length > 1 ? p.replace(/\/+$/, '') : p);
+    return left.origin === right.origin && trim(left.pathname) === trim(right.pathname);
+  } catch {
+    return a === b;
+  }
+};

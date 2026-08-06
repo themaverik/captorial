@@ -49,6 +49,16 @@ const run = async (): Promise<void> => {
     throw new Error(`Invalid spec ${specPath}:\n- ${result.errors.join('\n- ')}`);
   }
 
+  // Capturing nothing is a valid spec but never an intended one, and the run takes just as long to
+  // find out. Say so before the browser starts rather than after.
+  if (!result.spec.steps.some((step) => step.shot)) {
+    log.warn(
+      `"${result.spec.tutorial}" declares no shots, so this run will drive the flow and capture ` +
+        `nothing. Mark frames while recording with Ctrl+Shift+S / Ctrl+Shift+F, or add a "shot:" ` +
+        `to a step by hand.`,
+    );
+  }
+
   const config = buildConfig();
   log.info(`Replaying "${result.spec.tutorial}" (${result.spec.steps.length} steps) -> ${config.outputDir}`);
   const outcome = await replaySpec(result.spec, config);

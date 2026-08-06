@@ -4,7 +4,18 @@
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { absoluteUrl, urlMatches } from './urlMatch.js';
+import { absoluteUrl, samePage, urlMatches } from './urlMatch.js';
+
+test('samePage ignores the query and fragment but not the path', () => {
+  assert.equal(samePage('https://h/ops/tasks?a=1', 'https://h/ops/tasks'), true);
+  assert.equal(samePage('https://h/ops/tasks#x', 'https://h/ops/tasks'), true);
+  assert.equal(samePage('https://h/ops/tasks/', 'https://h/ops/tasks'), true);
+  assert.equal(samePage('https://h/ops', 'https://h/ops/tasks'), false);
+});
+
+test('samePage treats a different origin as a different page', () => {
+  assert.equal(samePage('https://h/ops', 'https://other/ops'), false);
+});
 
 test('absoluteUrl does not double a path prefix already carried by the base URL', () => {
   // Recorded paths are origin-relative, so the base's own path must not be prepended again.
