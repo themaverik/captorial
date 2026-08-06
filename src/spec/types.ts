@@ -5,15 +5,28 @@
  */
 
 /**
- * A semantic locator. Resolution order at replay time: role+name -> testid -> text. Recorders store
- * every candidate they can so the runner falls through on failure and logs which one it used, making
- * drift visible before it becomes breakage.
+ * A semantic locator. Resolution order at replay time: role+name -> testid -> label -> text.
+ * Recorders store every candidate they can so the runner falls through on failure and logs which one
+ * it used, making drift visible before it becomes breakage.
  */
 export interface SpecLocator {
   role?: string;
   name?: string;
   testid?: string;
+  /**
+   * Associated label or aria-label of a form control. The only tier that reaches a control with no
+   * implicit ARIA role — `input[type=password]` and `input[type=file]` have none, so without this
+   * they are locatable by testid alone.
+   */
+  label?: string;
   text?: string;
+  /**
+   * Resolve the tiers above inside this element rather than the whole page. Scoping, not a tier: it
+   * narrows whichever tier wins. This is how a control an app leaves unnamable stays locatable — a
+   * custom dropdown trigger with only placeholder text is ambiguous page-wide but unique inside the
+   * field that owns it. Still semantic: both halves are role/testid/label/text, never DOM structure.
+   */
+  within?: SpecLocator;
   /** Disambiguation index when several elements match. Recorded metadata; prefer a testid instead. */
   nth?: number;
 }
