@@ -14,9 +14,22 @@ add what is particular to this codebase.
 
 ## Locators
 
-- Author locators as role+name first, then testid, then text. The runner resolves in that order and
-  logs the winning tier. Never write raw CSS selectors or XPath that bind to DOM structure.
+- Author locators as role+name first, then testid, then label, then text. The runner resolves in that
+  order and logs the winning tier. Never write raw CSS selectors or XPath that bind to DOM structure.
 - Store every candidate a recorder can capture, so the runner can fall through on drift.
+- `label` is the tier for a control with no implicit ARIA role (`input[type=password]`,
+  `input[type=file]`). Adding a tier is a coupled change: `SpecLocator` and `LOCATOR_KEYS`,
+  `LocatorTier` / `locatorTiers` / `buildLocator`, `pick` in `record/verify.ts`, `locatorFor` in
+  `record/locatorFrom.ts`, `orderLocator` in `spec/serialize.ts`, and the tests for each.
+- `within` is scoping, not a tier: it narrows whichever tier wins, and adds no candidate of its own
+  (`locatorTiers` ignores it). It is how a control an app leaves unnamable stays locatable — a
+  trigger with only placeholder text is ambiguous page-wide and unique inside its field. Both halves
+  stay semantic, so this is not a back door for CSS. It must ride along in `pick`, or a verified
+  locator is stored without the scope that made it resolve.
+- Which element a click meant is decided in `record/attribute.ts`, in Node and pure, never in the
+  injected script. The observer reports both the ancestor it walked to and what the pointer was over;
+  an ancestor that dwarfs the clicked element is a container, and recording the container as if it
+  were the control writes down an action the user never performed.
 
 ## Adding a step action
 
