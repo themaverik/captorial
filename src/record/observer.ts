@@ -55,24 +55,37 @@ export interface PageMetrics {
 /** The action a `change` event implies, derived from the control's tag and type. */
 export type ChangeAction = 'fill' | 'select' | 'check' | 'upload';
 
+/**
+ * Facts every event carries. `url` is read in the page as the interaction happens, so Node can tell
+ * whether the page it later verifies against is still the one the user acted on.
+ */
+interface EventContext {
+  url: string;
+  metrics: PageMetrics;
+}
+
 export type ObservedEvent =
-  | { kind: 'click'; element: ElementDescriptor; rect: ElementRect; metrics: PageMetrics }
-  | {
+  | ({
+      kind: 'click';
+      element: ElementDescriptor;
+      rect: ElementRect;
+      /** What the pointer was actually over, when the walk attributed the click to an ancestor. */
+      inner?: { element: ElementDescriptor; rect: ElementRect };
+    } & EventContext)
+  | ({
       kind: 'change';
       action: ChangeAction;
       checked: boolean;
       element: ElementDescriptor;
       rect: ElementRect;
-      metrics: PageMetrics;
-    }
-  | {
+    } & EventContext)
+  | ({
       kind: 'shot-anchored';
       element: ElementDescriptor | null;
       rect: ElementRect | null;
       anchorY: number | null;
-      metrics: PageMetrics;
-    }
-  | { kind: 'shot-fullpage'; metrics: PageMetrics };
+    } & EventContext)
+  | ({ kind: 'shot-fullpage' } & EventContext);
 
 /**
  * Runs inside the page. Self-contained by necessity — Playwright serialises it, so it can close over
@@ -163,6 +176,9 @@ const initScript = (arg: { binding: string; maxText: number }): void => {
     contentHeight: Math.ceil(document.documentElement.scrollHeight),
   });
 
+  /** The facts every payload carries, read now — Node sees them only after the act has landed. */
+  const context = () => ({ url: location.href, metrics: metrics() });
+
   /** Sticky and fixed chrome sits at the top of the viewport but is a poor frame anchor. */
   const isPinned = (el: Element): boolean => {
     let node: Element | null = el;
@@ -233,7 +249,15 @@ const initScript = (arg: { binding: string; maxText: number }): void => {
       const el = target.closest(INTERACTIVE) ?? target;
       // Skip controls whose interaction is reported as a change, so one act is not recorded twice.
       if (changeDrivesIt(el)) return;
-      send({ kind: 'click', element: describe(el), rect: rectOf(el), metrics: metrics() });
+      // Report what was under the pointer as well as what the walk landed on. Whether the ancestor
+      // is the control or merely its container is decided in Node, where it can be tested.
+      send({
+        kind: 'click',
+        element: describe(el),
+        rect: rectOf(el),
+        inner: el === target ? undefined : { element: describe(target), rect: rectOf(target) },
+        ...context(),
+      });
     },
     true,
   );
@@ -257,7 +281,7 @@ const initScript = (arg: { binding: string; maxText: number }): void => {
       checked: Boolean((el as HTMLInputElement).checked),
       element: describe(el),
       rect: rectOf(el),
-      metrics: metrics(),
+      ...context(),
     };
   };
 
@@ -316,14 +340,16 @@ const initScript = (arg: { binding: string; maxText: number }): void => {
     'keydown',
     (event) => {
       if (!event.ctrlKey || !event.shiftKey) return;
-      const key = event.key.toLowerCase();
+      // Prefer the physical key: `key` reports the character the layout produces, which for a
+      // non-Latin or remapped layout is not the letter printed on the cap the operator pressed.
+      const key = (event.code.startsWith('Key') ? event.code.slice(3) : event.key).toLowerCase();
       if (key !== 's' && key !== 'f') return;
       event.preventDefault();
       event.stopPropagation();
       // Commit any half-typed field first, so the value is ordered before the shot it precedes.
       flushPending();
       if (key === 'f') {
-        send({ kind: 'shot-fullpage', metrics: metrics() });
+        send({ kind: 'shot-fullpage', ...context() });
         return;
       }
       const anchor = anchorElement();
@@ -332,33 +358,43 @@ const initScript = (arg: { binding: string; maxText: number }): void => {
         element: anchor ? describe(anchor) : null,
         rect: anchor ? rectOf(anchor) : null,
         anchorY: anchor ? Math.round(anchor.getBoundingClientRect().top + window.scrollY) : null,
-        metrics: metrics(),
+        ...context(),
       });
     },
     true,
   );
 };
 
+/** Runs work on the observer's queue, keeping it in order with the interactions around it. */
+export type Enqueue = (task: () => void | Promise<void>) => Promise<void>;
+
 /**
  * Install the observer on a context. Register before opening a page so the init script is present
  * from the first document. A handler that throws must not break the app under test, so failures are
  * swallowed here and surfaced by the session instead.
+ *
+ * Returns the queue's `enqueue`, so anything else recording into the same stream — page navigation,
+ * which Playwright reports on its own event — is ordered against interactions rather than racing
+ * them. Appending a navigation directly would land it before the click that caused it, since that
+ * click is still waiting behind its own verification.
  */
 export const installObserver = async (
   context: BrowserContext,
   onEvent: (page: Page, event: ObservedEvent) => Promise<void>,
-): Promise<void> => {
+): Promise<Enqueue> => {
   // Handlers must run one at a time. A spec is an ordered stream, so concurrent handlers could
   // record steps out of order; and each one measures the live page, which a later interaction would
   // otherwise be free to scroll out from under it.
   let queue: Promise<void> = Promise.resolve();
-  await context.exposeBinding(BINDING, (source, payload) => {
-    queue = queue
-      .then(() => onEvent(source.page, payload as ObservedEvent))
-      .catch(() => undefined); // reported by the session; never propagate into the page
+  const enqueue: Enqueue = (task) => {
+    queue = queue.then(task).catch(() => undefined); // reported by the session; never reaches the page
     return queue;
-  });
+  };
+  await context.exposeBinding(BINDING, (source, payload) =>
+    enqueue(() => onEvent(source.page, payload as ObservedEvent)),
+  );
   // Order matters: init scripts run in registration order, and the shim must land first.
   await context.addInitScript({ content: KEEP_NAMES_SHIM });
   await context.addInitScript(initScript, { binding: BINDING, maxText: MAX_TEXT });
+  return enqueue;
 };

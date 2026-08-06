@@ -69,8 +69,13 @@ export const runSession = async (
         seen.add(message);
         warnings.push(message);
       },
-      skip: () => {
+      skip: (message) => {
         skipped += 1;
+        // Deduped like a warning: one unrecordable control touched repeatedly is one thing to fix,
+        // but two different ones are two, and a tally could never tell them apart.
+        if (seen.has(message)) return;
+        seen.add(message);
+        warnings.push(message);
       },
       note: (message) => log.step(message),
     },
@@ -90,7 +95,7 @@ export const runSession = async (
     storageState:
       config.storageState && fs.existsSync(config.storageState) ? config.storageState : undefined,
   });
-  await installObserver(context, translate);
+  const enqueue = await installObserver(context, translate);
 
   const page = await context.newPage();
   let droppedAuthHops = 0;
@@ -105,7 +110,13 @@ export const runSession = async (
       droppedAuthHops += 1;
       return;
     }
-    events.push({ kind: 'navigate', path });
+    // Through the observer's queue, not straight onto the array: the click that caused this
+    // navigation is still being verified, and appending here would order the destination page
+    // ahead of the click that led to it — which replays as a step whose first action belongs to
+    // the page before it.
+    void enqueue(() => {
+      events.push({ kind: 'navigate', path });
+    });
   });
 
   await page.goto(config.baseUrl, { waitUntil: 'domcontentloaded' });
@@ -127,7 +138,8 @@ export const runSession = async (
   }
   if (skipped) {
     warnings.push(
-      `${skipped} interaction(s) were skipped: no role+name, data-testid, or short text to locate them by`,
+      `${skipped} interaction(s) could not be recorded; each distinct one is listed above. A flow ` +
+        `missing the click that opens a menu replays against a closed one.`,
     );
   }
   return { events, warnings };
