@@ -55,6 +55,13 @@ const NAME_FROM_CONTENT = new Set(['button', 'link', 'heading', 'menuitem', 'tab
  */
 const NOT_NAMED_BY_TEXT = new Set(['input', 'select', 'textarea']);
 
+/**
+ * Controls a `<label>` can be associated with, and so the only ones `getByLabel` resolves. This is
+ * the tier that reaches a control with no implicit role: without it a labelled password or file
+ * input offers no candidate at all and the interaction is dropped.
+ */
+const LABELLABLE = new Set(['input', 'select', 'textarea']);
+
 /** Collapse whitespace and trim; returns undefined for anything empty or over `max`. */
 const clean = (value: string | undefined, max = MAX_NAME_LEN): string | undefined => {
   if (!value) return undefined;
@@ -108,6 +115,9 @@ export const locatorFor = (d: ElementDescriptor): SpecLocator => {
   }
   const testid = clean(d.testid);
   if (testid) locator.testid = testid;
+  // getByLabel matches an associated <label> or an aria-label, so either serves as the candidate.
+  const label = LABELLABLE.has(d.tag) ? clean(d.labelText) ?? clean(d.ariaLabel) : undefined;
+  if (label) locator.label = label;
   // Only short text from an element that its text actually describes; a paragraph is prose and a
   // select's text is its option list, neither of which locates anything.
   const text = NOT_NAMED_BY_TEXT.has(d.tag) ? undefined : clean(d.text, MAX_TEXT_LEN);
